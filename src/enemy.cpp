@@ -5,12 +5,13 @@ void Enemy::Move(Vector3 transform) {
 }
 
 Enemy::Enemy(float x, float z) {
+    const GameSettings& settings = GameSettings::GetInstance();
     position = { x, 0.5f, z };
     color = RED;
     attackDistance = 1.0f;
-    minSpeed = 5;
-    maxSpeed = 15;
-    speed = static_cast<float>(GetRandomValue(minSpeed, maxSpeed));
+    speed = static_cast<float>(GetRandomValue(
+        static_cast<int>(settings.minEnemySpeed * 100.0f),
+        static_cast<int>(settings.maxEnemySpeed * 100.0f))) / 100.0f;
 }
 
 void Enemy::Udpate(float deltaTime, Vector3 targetPosition) {

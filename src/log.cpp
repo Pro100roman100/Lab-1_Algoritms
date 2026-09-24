@@ -1,11 +1,10 @@
 #include "log.h"
 
-float logShowTime = 5.0f;
-int logFontSize = 18;
-std::list<LogData> logs;
+std::list<LogData> Logger::logs;
 
 void Logger::Log(std::string string) {
-	logs.push_front({ string, logShowTime });
+    const GameSettings& settings = GameSettings::GetInstance();
+    logs.push_front({ string, settings.logShowTime });
 }
 
 void Logger::DrawLogs() {

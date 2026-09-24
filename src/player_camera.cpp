@@ -44,7 +44,7 @@ void PlayerCamera::Update(float deltaTime) {
 	Move(moveDirection);
 
 	if (IsKeyPressed(KEY_F1)) {
-		Logger::Log("Camera reset");
+		LOG("Camera reset");
 		Reset();
 	}
 }

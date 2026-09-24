@@ -3,6 +3,10 @@
 #include <string>
 #include <list> 
 
+#include "game_settings.h"
+
+#define LOG(string) Logger::Log(string)
+
 struct LogData {
 	std::string string;
 	float remainingTime;
@@ -10,10 +14,8 @@ struct LogData {
 
 class Logger {
 private:
-	inline static float logShowTime = 5.0f;
-	inline static const int logFontSize = 18;
-
-	inline static std::list<LogData> logs;
+	static const int logFontSize = 18;
+	static std::list<LogData> logs;
 
 public:
 	static void Log(std::string string);

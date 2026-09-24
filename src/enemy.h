@@ -3,6 +3,8 @@
 #include <raylib.h>
 #include <raymath.h>
 
+#include "game_settings.h"
+
 class Enemy {
 private:
 	Vector3 position;
@@ -10,9 +12,6 @@ private:
 	float speed;
 
 	float attackDistance;
-
-	int maxSpeed;
-	int minSpeed;
 
 	void Move(Vector3 transform);
 public:

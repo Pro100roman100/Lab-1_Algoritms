@@ -7,6 +7,8 @@
 
 #include "log.h"
 #include "scope_marker.h"
+#include "config_loader.h"
+#include "console.h"
 
 #include <vector>
 #include <list>
@@ -21,12 +23,11 @@ int main() {
 
 	PlayerCamera camera;
 	Target target(0, 0);
+	Console console;
 
 	std::vector<StaticCube> cubes;
 	std::list<Enemy> enemies;
 
-	int maxEnemies = 10;
-	float spawnInterval = 1.5f;
 	float spawnTimer = 0.0f;
 	float spawnRadius = 40.0f;
 
@@ -36,20 +37,39 @@ int main() {
 			cubes.emplace_back(x + 0.5f, y + 0.5f);
 		}
 	}
+	
+	if (ConfigLoader::Load("config.txt")) {
+		LOG("Configuration loaded");
+	}
+	else {
+		LOG("Failed to load configuration");
+	}
 
 	while (!WindowShouldClose()) {
 		// UPDATE
 		float deltaTime = GetFrameTime();
+		console.Update();
 
 		Logger::BeginFrame(deltaTime);
 		ScopeMarker::BeginFrame();
 
+		if (!console.IsOpen() && IsKeyPressed(KEY_F5)) {
+			if (ConfigLoader::Load("config.txt")) {
+				LOG("Configuration loaded");
+			}
+			else {
+				LOG("Failed to load configuration");
+			}
+		}
+
 		SCOPE_MARKER(Frame, Frame);
 
-		camera.Update(deltaTime);
+		if(!console.IsOpen())
+			camera.Update(deltaTime);
 
 		spawnTimer += deltaTime;
-		if (spawnTimer >= spawnInterval && enemies.size() < maxEnemies) {
+		const GameSettings& settings = GameSettings::GetInstance();
+		if (spawnTimer >= settings.spawnInterval && enemies.size() < settings.maxEnemies) {
 			spawnTimer = 0.0f;
 
 			float angle = GetRandomValue(0, 360) * DEG2RAD;
@@ -58,7 +78,7 @@ int main() {
 			float spawnZ = target.position.z + sin(angle) * spawnRadius;
 
 			enemies.emplace_back(spawnX, spawnZ);
-			Logger::Log("Enemy spawned");
+			LOG("Enemy spawned");
 		}
 
 		for (auto it = enemies.begin(); it != enemies.end(); ) {
@@ -66,7 +86,7 @@ int main() {
 
 			if (it->IsAttacking(target.position)) {
 				it = enemies.erase(it);
-				Logger::Log("Enemy Attacked");
+				LOG("Enemy Attacked");
 			}
 			else {
 				++it;
@@ -95,6 +115,7 @@ int main() {
 
 		Logger::DrawLogs();
 		ScopeMarker::DrawMarkers();
+		console.Draw();
 
 		SCOPE_MARKER(EndDrawing, Render);
 		EndDrawing();

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -301,6 +301,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\console.h" />
+    <ClInclude Include="src\game_settings.h" />
+    <ClInclude Include="src\config_loader.h" />
     <ClInclude Include="src\enemy.h" />
     <ClInclude Include="src\log.h" />
     <ClInclude Include="src\player_camera.h" />
@@ -310,6 +313,8 @@
     <ClInclude Include="src\target.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\config_loader.cpp" />
+    <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\enemy.cpp" />
     <ClCompile Include="src\log.cpp" />
     <ClCompile Include="src\main.cpp" />
@@ -328,6 +333,9 @@
     <ProjectReference Include="raylib.vcxproj">
       <Project>{8898EA18-743A-15EF-5DF5-284349369C3F}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="config.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

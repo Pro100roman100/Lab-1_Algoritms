@@ -1,0 +1,6 @@
+# Runtime configuration
+spawn_interval=1.5
+min_enemy_speed=5.0
+max_enemy_speed=15.0
+max_enemies=10
+log_show_time=5.0
