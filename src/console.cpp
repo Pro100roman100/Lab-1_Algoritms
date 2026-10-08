@@ -40,12 +40,12 @@ void Console::ExecuteCommand(std::string& command) {
 	}
 
 	std::string value;
-	if (stream >> value && ConfigLoader::SetParameter(name, value)) {
-		AddOutput("Set " + name + " = " + value);
-	}
-	else {
-		AddOutput("Unknown or invalid command: " + command);
-	}
+	stream >> value;
+	ParseCode code = ConfigLoader::SetParameter(name, value);
+	if (code == ParseCode::no_err)
+		AddOutput(name + " changed successfully");
+	else
+		AddOutput(ConfigLoader::GetErrorString(code, name, value));
 }
 
 void Console::Update() {

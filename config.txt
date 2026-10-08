@@ -1,6 +1,11 @@
-# Runtime configuration
+# Game
+max_fps=60
+
+# Enemies
 spawn_interval=1.5
 min_enemy_speed=5.0
 max_enemy_speed=15.0
 max_enemies=10
+
+# Debug
 log_show_time=5.0

@@ -1,8 +1,21 @@
 #include "target.h"
 
-Target::Target(float x, float z) {
-    position = { x, 1.0f, z };
+Target* Target::currentTarget = nullptr;
+
+Target::Target(Vector3 position) {
+    this->position = position;
     color = GREEN;
+    currentTarget = this;
+}
+
+Target::~Target() {
+    if (currentTarget == this) {
+        currentTarget = nullptr;
+    }
+}
+
+Target* Target::GetCurrentTarget() {
+    return currentTarget;
 }
 
 void Target::Draw() const {

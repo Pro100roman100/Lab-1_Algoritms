@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\resource_dir.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\player_camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -43,6 +40,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\console.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\game_world.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\game_object.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\enemy_spawner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -74,6 +80,12 @@
     <ClCompile Include="src\console.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\game_world.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\enemy_spawner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico">
@@ -87,5 +99,10 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="config.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="resources\model_texture.png">
+      <Filter>Game Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

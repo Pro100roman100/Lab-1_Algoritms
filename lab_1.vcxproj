@@ -302,12 +302,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\console.h" />
+    <ClInclude Include="src\enemy_spawner.h" />
+    <ClInclude Include="src\game_object.h" />
     <ClInclude Include="src\game_settings.h" />
     <ClInclude Include="src\config_loader.h" />
     <ClInclude Include="src\enemy.h" />
+    <ClInclude Include="src\game_world.h" />
     <ClInclude Include="src\log.h" />
     <ClInclude Include="src\player_camera.h" />
-    <ClInclude Include="src\resource_dir.h" />
     <ClInclude Include="src\scope_marker.h" />
     <ClInclude Include="src\static_cube.h" />
     <ClInclude Include="src\target.h" />
@@ -316,6 +318,8 @@
     <ClCompile Include="src\config_loader.cpp" />
     <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\enemy.cpp" />
+    <ClCompile Include="src\enemy_spawner.cpp" />
+    <ClCompile Include="src\game_world.cpp" />
     <ClCompile Include="src\log.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\player_camera.cpp" />
@@ -336,6 +340,9 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="config.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="resources\model_texture.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

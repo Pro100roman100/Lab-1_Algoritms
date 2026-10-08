@@ -12,7 +12,13 @@ void Logger::DrawLogs() {
 	int offset = 5;
     bool isFirstLog = true;
 
+    int n = 0;
+
 	for (LogData logData : logs) {
+        if (n > 40)
+            break;
+        n++;
+        
         if (isFirstLog) {
             int firstFontSize = logFontSize + (int)((float)logFontSize * 0.2f);
             int textSize = MeasureText(logData.string.c_str(), firstFontSize);

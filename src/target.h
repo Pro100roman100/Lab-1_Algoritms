@@ -1,13 +1,17 @@
 #pragma once
 #include <raylib.h>
 
-class Target {
-	Color color;
+#include "game_object.h"
 
+class Target : public DrawableObject {
 public:
-	Vector3 position;
+	Target(Vector3 position);
+	~Target();
+	static Target* GetCurrentTarget();
+	void Draw() const override;
 
-	Target(float x, float z);
-	void Draw() const;
+private:
+	static Target* currentTarget;
+	Color color;
 };
 

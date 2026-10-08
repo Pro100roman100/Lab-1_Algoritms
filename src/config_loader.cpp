@@ -3,8 +3,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace {
-std::string Trim(const std::string& value) {
+std::string ConfigLoader::Trim(const std::string& value) {
 	const size_t first = value.find_first_not_of(" \t\r\n");
 	if (first == std::string::npos) {
 		return "";
@@ -14,69 +13,88 @@ std::string Trim(const std::string& value) {
 	return value.substr(first, last - first + 1);
 }
 
-bool ParsePositiveFloat(const std::string& value, float& result) {
+ParseCode ConfigLoader::ParseFloat(const std::string& value, float& result, float min, float max) {
 	try {
 		const float parsed = std::stof(value);
-		if (parsed <= 0.0f) {
-			return false;
+		if (parsed <= min || parsed >= max) {
+			return ParseCode::out_of_bounds;
 		}
 		result = parsed;
-		return true;
+		return ParseCode::no_err;
 	}
 	catch (...) {
-		return false;
+		return ParseCode::invalid_value;
 	}
 }
-
-bool ParsePositiveInt(const std::string& value, int& result) {
+ParseCode ConfigLoader::ParseInt(const std::string& value, int& result, int min, int max) {
 	try {
 		const int parsed = std::stoi(value);
-		if (parsed <= 0) {
-			return false;
+		if (parsed < min || parsed > max) {
+			return ParseCode::out_of_bounds;
 		}
 		result = parsed;
-		return true;
+		return ParseCode::no_err;
 	}
 	catch (...) {
-		return false;
+		return ParseCode::invalid_value;
 	}
 }
-}
 
-bool ConfigLoader::SetParameter(std::string& key, std::string& value) {
+ParseCode ConfigLoader::SetParameter(std::string& key, std::string& value) {
 	to_lower_case(key);
 	to_lower_case(value);
 	GameSettings& settings = GameSettings::GetInstance();
 
 	if (key == "spawn_interval") {
-		return ParsePositiveFloat(value, settings.spawnInterval);
+		return ParseFloat(value, settings.spawnInterval);
 	}
 	if (key == "min_enemy_speed") {
 		const float oldValue = settings.minEnemySpeed;
-		if (!ParsePositiveFloat(value, settings.minEnemySpeed) ||
-			settings.minEnemySpeed > settings.maxEnemySpeed) {
+		if (ParseCode code = ParseFloat(value, settings.minEnemySpeed))
+			return code;
+		else if(settings.minEnemySpeed > settings.maxEnemySpeed) {
 			settings.minEnemySpeed = oldValue;
-			return false;
 		}
-		return true;
+		return ParseCode::no_err;
 	}
 	if (key == "max_enemy_speed") {
 		const float oldValue = settings.maxEnemySpeed;
-		if (!ParsePositiveFloat(value, settings.maxEnemySpeed) ||
-			settings.maxEnemySpeed < settings.minEnemySpeed) {
-			settings.maxEnemySpeed = oldValue;
-			return false;
+		if (ParseCode code = ParseFloat(value, settings.maxEnemySpeed))
+			return code;
+		else if (settings.minEnemySpeed < settings.maxEnemySpeed) {
+			settings.minEnemySpeed = oldValue;
 		}
-		return true;
+		return ParseCode::no_err;
 	}
 	if (key == "max_enemies") {
-		return ParsePositiveInt(value, settings.maxEnemies);
+		return ParseInt(value, settings.maxEnemies);
+	}
+	if (key == "max_fps") {
+		ParseCode result = ParseInt(value, settings.maxFps, 15);
+		if (result == ParseCode::no_err)
+			SetTargetFPS(GameSettings::GetInstance().maxFps);
+		return result;
 	}
 	if (key == "log_show_time") {
-		return ParsePositiveFloat(value, settings.logShowTime);
+		return ParseFloat(value, settings.logShowTime);
 	}
 
-	return false;
+	return ParseCode::invalid_name;
+}
+
+std::string ConfigLoader::GetErrorString(ParseCode code, std::string& key, std::string& value) {
+	switch (code) {
+	case ParseCode::no_err:
+		return "";
+	case ParseCode::invalid_name:
+		return "Set " + key + " error: Invalid name";
+	case ParseCode::invalid_value:
+		return "Set " + key + " error: Invalid value " + value;
+	case ParseCode::out_of_bounds:
+		return "Set " + key + " error: Value " + value + " Out of bounds ";
+	default:
+		return "Set " + key + " error";
+	}
 }
 
 bool ConfigLoader::Load(const std::string& filePath) {
@@ -103,9 +121,9 @@ bool ConfigLoader::Load(const std::string& filePath) {
 		std::string key = Trim(line.substr(0, separator));
 		std::string value = Trim(line.substr(separator + 1));
 
-		if (!SetParameter(key, value)) {
-			LOG("Unknown key " + key);
-		}
+		ParseCode code = SetParameter(key, value);
+		if (code != ParseCode::no_err)
+			LOG(GetErrorString(code, key, value));
 	}
 
 	if (settings.minEnemySpeed > settings.maxEnemySpeed) {

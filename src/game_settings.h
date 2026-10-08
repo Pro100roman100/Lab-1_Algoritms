@@ -13,6 +13,7 @@ struct GameSettings {
 	float minEnemySpeed = 5.0f;
 	float maxEnemySpeed = 15.0f;
 	int maxEnemies = 10;
+	int maxFps = 60;
 	float logShowTime = 5.0f;
 
 private:

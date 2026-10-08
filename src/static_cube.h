@@ -1,13 +1,13 @@
 #pragma once
 #include <raylib.h>
 
-class StaticCube
-{
-	Vector3 position;
+#include "game_object.h"
+
+class StaticCube : public DrawableObject {
+	Vector3 size;
 	Color color;
 
 public:
-	StaticCube(float x, float z);
-    void Draw() const;
+	StaticCube(Vector3 position, Vector3 size);
+    void Draw() const override;
 };
-

@@ -2,22 +2,27 @@
 
 #include <raylib.h>
 #include <raymath.h>
+#include <memory>
 
 #include "game_settings.h"
+#include "game_object.h"
 
-class Enemy {
+class Enemy : public UpdatableObject {
+public:
+	Enemy(Vector3 position);
+	~Enemy();
+
+	void Update(float deltaTime) override;
+	void Draw() const override;
+
 private:
-	Vector3 position;
 	Color color;
 	float speed;
 
 	float attackDistance;
 
-	void Move(Vector3 transform);
-public:
+	static std::unique_ptr<Model> model;
+	static std::unique_ptr<Texture2D> texture;
 
-	Enemy(float x, float z);
-	void Udpate(float deltaTime, Vector3 targetPosition);
-	void Draw() const;
-	bool IsAttacking(Vector3 targetPosition) const;
+	void Move(Vector3 transform);
 };
