@@ -31,6 +31,3 @@ void EnemySpawner::Update(float deltaTime) {
 
 	GameWorld::GetInstance().AddObject(new Enemy(spawnPosition));
 }
-
-void EnemySpawner::Draw() const {
-}

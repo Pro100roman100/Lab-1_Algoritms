@@ -4,15 +4,14 @@
 GameWorld::GameWorld() = default;
 
 void GameWorld::InitWorld() {
-
     target = new Target({ 0.0f, 1.0f, 0.0f });
     AddObject(target);
 
-    for (int x = -50; x < 50; ++x) {
-        for (int z = -50; z < 50; ++z) {
+    for (int x = -5; x < 5; ++x) {
+        for (int z = -5; z < 5; ++z) {
             AddObject(new StaticCube(
-                { x + 0.5f, 0.0f, z + 0.5f },
-                { 1.0f, 1.0f, 1.0f }));
+                { 10.f * x + 5.f, 0.0f, 10.f * z + 5.f },
+                { 10.0f, 1.0f, 10.0f }));
         }
     }
 
@@ -20,10 +19,11 @@ void GameWorld::InitWorld() {
 }
 
 void GameWorld::ReloadWorld() {
-    for (auto* object : drawableObjects) {
+    for (GameObject* object : objects) {
         delete object;
     }
 
+    objects.clear();
     drawableObjects.clear();
     updatableObjects.clear();
     target = nullptr;
@@ -31,14 +31,32 @@ void GameWorld::ReloadWorld() {
     InitWorld();
 }
 
-void GameWorld::DrawWorld() {
+void GameWorld::DrawWorld(Camera3D camera) {
     SCOPE_MARKER(Draw, Render);
+    
+    visibleObjects = 0;
+    invisibleObjects = 0;
 
-    for (auto* object : drawableObjects) {
-        if (object->active) {
+    BeginMode3D(camera);
+
+    if(updateFrustum)
+        frustum.UpdateFrustum(camera);
+
+    for (DrawableObject* object : drawableObjects) {
+        if (object->active && frustum.IsVisible(object->GetBounds())) {
+            visibleObjects++;
             object->Draw();
         }
+        else
+            invisibleObjects++;
     }
+
+    EndMode3D();
+
+    DrawText(("Visible objects: " + std::to_string(visibleObjects)).c_str(), 
+        5, 5, 18, BLACK);
+    DrawText(("Invisible objects: " + std::to_string(invisibleObjects)).c_str(),
+        200, 5, 18, BLACK);
 }
 
 void GameWorld::UpdateWorld(float deltaTime) {
@@ -48,34 +66,41 @@ void GameWorld::UpdateWorld(float deltaTime) {
         UpdatableObject* object = *it;
         ++it;
 
-        if (!object->active) {
-            continue;
+        if (object->active) {
+            object->Update(deltaTime);
         }
-
-        object->Update(deltaTime);
     }
 }
 
-void GameWorld::AddObject(DrawableObject* object) {
+void GameWorld::AddObject(GameObject* object) {
     if (object == nullptr) {
         return;
     }
 
-    drawableObjects.push_back(object);
+    objects.push_back(object);
+
+    if (auto* drawable = dynamic_cast<DrawableObject*>(object)) {
+        drawableObjects.push_back(drawable);
+    }
+
     if (auto* updatable = dynamic_cast<UpdatableObject*>(object)) {
         updatableObjects.push_back(updatable);
     }
 }
 
-void GameWorld::RemoveObject(DrawableObject* object) {
+void GameWorld::RemoveObject(GameObject* object) {
     if (object == nullptr) {
         return;
     }
 
-    drawableObjects.remove(object);
+    if (auto* drawable = dynamic_cast<DrawableObject*>(object)) {
+        drawableObjects.remove(drawable);
+    }
+
     if (auto* updatable = dynamic_cast<UpdatableObject*>(object)) {
         updatableObjects.remove(updatable);
     }
 
+    objects.remove(object);
     delete object;
 }

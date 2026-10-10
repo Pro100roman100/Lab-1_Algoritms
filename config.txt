@@ -1,5 +1,5 @@
 # Game
-max_fps=60
+max_fps=120
 
 # Enemies
 spawn_interval=1.5

@@ -59,3 +59,10 @@ void Enemy::Update(float deltaTime) {
 void Enemy::Draw() const {
     DrawModel(*model, position, 0.5f, WHITE);
 }
+
+BoundingBox Enemy::GetBounds() const {
+    return {
+        position - Vector3{ 0.5f, 0.5f, 0.5f },
+        position + Vector3{ 0.5f, 0.5f, 0.5f }
+    };
+}

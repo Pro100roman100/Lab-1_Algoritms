@@ -51,6 +51,11 @@
     <ClInclude Include="src\enemy_spawner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\frustum.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\world_marker.h" />
+    <ClInclude Include="src\world_editor.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -84,6 +89,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\enemy_spawner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\frustum.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

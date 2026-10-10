@@ -57,11 +57,7 @@ int main() {
 		BeginDrawing();
 		ClearBackground(DARKBLUE);
 
-		BeginMode3D(camera.GetCamera());
-
-		gameWorld.DrawWorld();
-
-		EndMode3D();
+		gameWorld.DrawWorld(camera.GetCamera());
 
 		Logger::DrawLogs();
 		ScopeMarker::DrawMarkers();

@@ -7,13 +7,14 @@
 #include "game_settings.h"
 #include "game_object.h"
 
-class Enemy : public UpdatableObject {
+class Enemy : public DrawableObject, public UpdatableObject {
 public:
 	Enemy(Vector3 position);
 	~Enemy();
 
 	void Update(float deltaTime) override;
 	void Draw() const override;
+	BoundingBox GetBounds() const override;
 
 private:
 	Color color;

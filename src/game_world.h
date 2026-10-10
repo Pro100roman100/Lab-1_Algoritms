@@ -10,6 +10,7 @@
 #include "enemy.h"
 #include "static_cube.h"
 #include "target.h"
+#include "frustum.h"
 
 class GameWorld {
 public:
@@ -21,20 +22,27 @@ public:
 	GameWorld(const GameWorld&) = delete;
 	GameWorld& operator=(const GameWorld&) = delete;
 
+	bool updateFrustum = true;
+
 	void InitWorld();
 	void ReloadWorld();
 
 	void UpdateWorld(float deltaTime);
-	void DrawWorld();
+	void DrawWorld(Camera3D camera);
 
-	void AddObject(DrawableObject* object);
-	void RemoveObject(DrawableObject* object);
-
+	void AddObject(GameObject* object);
+	void RemoveObject(GameObject* object);
 private:
 	GameWorld();
 
+	std::list<GameObject*> objects;
 	std::list<DrawableObject*> drawableObjects;
 	std::list<UpdatableObject*> updatableObjects;
-	
-	class Target* target = nullptr;
+
+	Target* target = nullptr;
+
+	Frustum frustum;
+
+	int visibleObjects;
+	int invisibleObjects;
 };

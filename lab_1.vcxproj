@@ -303,6 +303,7 @@
   <ItemGroup>
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\enemy_spawner.h" />
+    <ClInclude Include="src\frustum.h" />
     <ClInclude Include="src\game_object.h" />
     <ClInclude Include="src\game_settings.h" />
     <ClInclude Include="src\config_loader.h" />
@@ -313,12 +314,15 @@
     <ClInclude Include="src\scope_marker.h" />
     <ClInclude Include="src\static_cube.h" />
     <ClInclude Include="src\target.h" />
+    <ClInclude Include="src\world_editor.h" />
+    <ClInclude Include="src\world_marker.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\config_loader.cpp" />
     <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\enemy.cpp" />
     <ClCompile Include="src\enemy_spawner.cpp" />
+    <ClCompile Include="src\frustum.cpp" />
     <ClCompile Include="src\game_world.cpp" />
     <ClCompile Include="src\log.cpp" />
     <ClCompile Include="src\main.cpp" />

@@ -44,8 +44,8 @@ void ScopeMarker::BeginFrame() {
 }
 
 void ScopeMarker::DrawMarkers() {
-	int y = 5;
 	int fontSize = 18;
+	int y = 5 + fontSize;
 
 	std::string previousCategory = "";
 	for (const MarkerData& marker : averageMarkers) {

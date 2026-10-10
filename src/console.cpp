@@ -1,6 +1,7 @@
 #include "console.h"
 
 #include "config_loader.h"
+#include "game_world.h"
 
 #include <sstream>
 
@@ -24,18 +25,27 @@ void Console::ExecuteCommand(std::string& command) {
 
 	if (name == "help" || name == "h") {
 		AddOutput("help - help menu");
-		AddOutput("reloadconfig - load config from file");
+		AddOutput("reload_config - load config from file");
+		AddOutput("frustum_update - flip frustum update");
 		AddOutput("spawn_interval <value> - change spawn interval");
 		AddOutput("min_enemy_speed <value> - change min enemy speed");
 		AddOutput("max_enemy_speed <value> - change max enemy speed");
 		AddOutput("max_enemies <value> - change max enemies");
 		AddOutput("log_show_time <value> - change log show time");
+		AddOutput("max_fps <value> - change max fps");
 		return;
 	}
-	if (name == "reloadconfig") {
+	if (name == "reload_config") {
 		AddOutput(ConfigLoader::Load("config.txt")
 			? "Configuration reloaded"
 			: "Failed to reload configuration");
+		return;
+	}
+	if (name == "frustum_update") {
+		GameWorld::GetInstance().updateFrustum = !GameWorld::GetInstance().updateFrustum;
+		AddOutput(GameWorld::GetInstance().updateFrustum
+			? "frustum update on"
+			: "frustum update off");
 		return;
 	}
 

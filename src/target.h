@@ -9,6 +9,7 @@ public:
 	~Target();
 	static Target* GetCurrentTarget();
 	void Draw() const override;
+	BoundingBox GetBounds() const override;
 
 private:
 	static Target* currentTarget;
