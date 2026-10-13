@@ -5,7 +5,7 @@
 
 class Target : public DrawableObject {
 public:
-	Target(Vector3 position);
+	Target(Vector3 position, bool setMain = true);
 	~Target();
 	static Target* GetCurrentTarget();
 	void Draw() const override;

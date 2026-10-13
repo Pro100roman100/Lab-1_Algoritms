@@ -1,24 +1,14 @@
 #include "game_world.h"
 #include "enemy_spawner.h"
+#include "camera_marker.h"
 
 GameWorld::GameWorld() = default;
 
 void GameWorld::InitWorld() {
-    target = new Target({ 0.0f, 1.0f, 0.0f });
-    AddObject(target);
-
-    for (int x = -5; x < 5; ++x) {
-        for (int z = -5; z < 5; ++z) {
-            AddObject(new StaticCube(
-                { 10.f * x + 5.f, 0.0f, 10.f * z + 5.f },
-                { 10.0f, 1.0f, 10.0f }));
-        }
-    }
-
-    AddObject(new EnemySpawner(20.0f));
+    AddObject(new EnemySpawner());
 }
 
-void GameWorld::ReloadWorld() {
+void GameWorld::ClearWorld() {
     for (GameObject* object : objects) {
         delete object;
     }
@@ -31,11 +21,10 @@ void GameWorld::ReloadWorld() {
     InitWorld();
 }
 
-void GameWorld::DrawWorld(Camera3D camera) {
+void GameWorld::DrawWorld(Camera3D camera, bool showEditorObjects) {
     SCOPE_MARKER(Draw, Render);
     
-    visibleObjects = 0;
-    invisibleObjects = 0;
+    visibleObjects = invisibleObjects = 0;
 
     BeginMode3D(camera);
 
@@ -43,7 +32,11 @@ void GameWorld::DrawWorld(Camera3D camera) {
         frustum.UpdateFrustum(camera);
 
     for (DrawableObject* object : drawableObjects) {
-        if (object->active && frustum.IsVisible(object->GetBounds())) {
+        if (!showEditorObjects && dynamic_cast<CameraMarker*>(object) != nullptr) {
+            continue;
+        }
+
+        if (object != nullptr && object->active && frustum.IsVisible(object->GetBounds())) {
             visibleObjects++;
             object->Draw();
         }
@@ -62,11 +55,9 @@ void GameWorld::DrawWorld(Camera3D camera) {
 void GameWorld::UpdateWorld(float deltaTime) {
     SCOPE_MARKER(Update, Update);
 
-    for (auto it = updatableObjects.begin(); it != updatableObjects.end();) {
-        UpdatableObject* object = *it;
-        ++it;
-
-        if (object->active) {
+    const std::vector<UpdatableObject*> updateList = updatableObjects;
+    for (auto object : updateList) {
+        if (object != nullptr && object->active) {
             object->Update(deltaTime);
         }
     }
@@ -94,13 +85,37 @@ void GameWorld::RemoveObject(GameObject* object) {
     }
 
     if (auto* drawable = dynamic_cast<DrawableObject*>(object)) {
-        drawableObjects.remove(drawable);
+        for (int i = 0; i < drawableObjects.size(); i++) {
+            if (drawableObjects[i] == drawable) {
+                drawableObjects[i] = drawableObjects.back();
+                drawableObjects.pop_back();
+                break;
+            }
+        }
     }
 
     if (auto* updatable = dynamic_cast<UpdatableObject*>(object)) {
-        updatableObjects.remove(updatable);
+        for (int i = 0; i < updatableObjects.size(); i++) {
+            if (updatableObjects[i] == updatable) {
+                updatableObjects[i] = updatableObjects.back();
+                updatableObjects.pop_back();
+                break;
+            }
+        }
     }
 
-    objects.remove(object);
+    for (int i = 0; i < objects.size(); i++) {
+        if (objects[i] == object) {
+            objects[i] = objects.back();
+            objects.pop_back();
+            break;
+        }
+    }
+
     delete object;
+}
+
+std::vector<GameObject*>& const GameWorld::GetObjects()
+{
+    return objects;
 }

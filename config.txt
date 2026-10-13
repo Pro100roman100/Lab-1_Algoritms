@@ -3,6 +3,7 @@ max_fps=120
 
 # Enemies
 spawn_interval=1.5
+spawn_radius=30.0
 min_enemy_speed=5.0
 max_enemy_speed=15.0
 max_enemies=10

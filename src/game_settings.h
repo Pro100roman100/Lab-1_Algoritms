@@ -10,6 +10,7 @@ struct GameSettings {
 	GameSettings& operator=(const GameSettings&) = delete;
 
 	float spawnInterval = 1.5f;
+	float spawnRadius = 40.0f;
 	float minEnemySpeed = 5.0f;
 	float maxEnemySpeed = 15.0f;
 	int maxEnemies = 10;

@@ -2,6 +2,7 @@
 
 #include "config_loader.h"
 #include "game_world.h"
+#include "map_save.h"
 
 #include <sstream>
 
@@ -27,10 +28,13 @@ void Console::ExecuteCommand(std::string& command) {
 		AddOutput("help - help menu");
 		AddOutput("reload_config - load config from file");
 		AddOutput("frustum_update - flip frustum update");
+		AddOutput("load_map <filename> - load map");
+		AddOutput("save_map <filename> - save map");
 		AddOutput("spawn_interval <value> - change spawn interval");
 		AddOutput("min_enemy_speed <value> - change min enemy speed");
 		AddOutput("max_enemy_speed <value> - change max enemy speed");
 		AddOutput("max_enemies <value> - change max enemies");
+		AddOutput("spawn_radius <value> - change enemy spawn radius");
 		AddOutput("log_show_time <value> - change log show time");
 		AddOutput("max_fps <value> - change max fps");
 		return;
@@ -46,6 +50,22 @@ void Console::ExecuteCommand(std::string& command) {
 		AddOutput(GameWorld::GetInstance().updateFrustum
 			? "frustum update on"
 			: "frustum update off");
+		return;
+	}
+	if (name == "load_map") {
+		std::string filename = "level";
+		stream >> filename;
+		AddOutput(MapSave::LoadFromFile(filename)
+			? "Map loaded from " + filename
+			: "Failed to load map from " + filename);
+		return;
+	}
+	if (name == "save_map") {
+		std::string filename = "level";
+		stream >> filename;
+		AddOutput(MapSave::SaveToFile(filename)
+			? "Map saved to " + filename
+			: "Failed to save map to " + filename);
 		return;
 	}
 

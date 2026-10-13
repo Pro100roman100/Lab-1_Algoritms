@@ -48,6 +48,9 @@ ParseCode ConfigLoader::SetParameter(std::string& key, std::string& value) {
 	if (key == "spawn_interval") {
 		return ParseFloat(value, settings.spawnInterval);
 	}
+	if (key == "spawn_radius") {
+		return ParseFloat(value, settings.spawnRadius);
+	}
 	if (key == "min_enemy_speed") {
 		const float oldValue = settings.minEnemySpeed;
 		if (ParseCode code = ParseFloat(value, settings.minEnemySpeed))

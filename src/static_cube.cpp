@@ -7,7 +7,6 @@ StaticCube::StaticCube(Vector3 position, Vector3 size = { 1.0f, 1.0f, 1.0f }) {
     color = WHITE;
 
     Vector3 halfSize = size * 0.5f;
-    boundingBox = { position - halfSize, position + halfSize };
 }
 
 void StaticCube::Draw() const {
@@ -16,5 +15,5 @@ void StaticCube::Draw() const {
 }
 
 BoundingBox StaticCube::GetBounds() const {
-    return boundingBox;
+    return { position - size / 2, position + size / 2 };
 }

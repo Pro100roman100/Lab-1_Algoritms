@@ -4,9 +4,7 @@
 
 int EnemySpawner::enemyCount = 0;
 
-EnemySpawner::EnemySpawner(float spawnRadius)
-	: spawnRadius(spawnRadius) {
-}
+EnemySpawner::EnemySpawner() = default;
 
 void EnemySpawner::Update(float deltaTime) {
 	spawnTimer += deltaTime;
@@ -24,9 +22,9 @@ void EnemySpawner::Update(float deltaTime) {
 
 	float angle = GetRandomValue(0, 360) * DEG2RAD;
 	Vector3 spawnPosition = {
-		target->position.x + cos(angle) * spawnRadius,
+		target->position.x + cos(angle) * settings.spawnRadius,
 		target->position.y,
-		target->position.z + sin(angle) * spawnRadius
+		target->position.z + sin(angle) * settings.spawnRadius
 	};
 
 	GameWorld::GetInstance().AddObject(new Enemy(spawnPosition));

@@ -5,6 +5,7 @@
 
 class PlayerCamera {
 private:
+	static PlayerCamera* currentCamera;
 	Camera3D camera;
 
 	Vector3 startPosition;
@@ -16,6 +17,9 @@ private:
 public:
 
 	PlayerCamera();
-	Camera3D GetCamera() const;
+	~PlayerCamera();
+	static PlayerCamera& GetCamera();
+	Camera3D GetCameraData() const;
+	void SetPosition(Vector3 position);
 	void Update(float deltaTime);
 };

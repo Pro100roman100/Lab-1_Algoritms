@@ -25,8 +25,8 @@ Enemy::Enemy(Vector3 position) {
     color = RED;
     attackDistance = 1.0f;
     speed = static_cast<float>(GetRandomValue(
-        static_cast<int>(settings.minEnemySpeed * 100.0f),
-        static_cast<int>(settings.maxEnemySpeed * 100.0f))) / 100.0f;
+        static_cast<int>(settings.minEnemySpeed * 10000.0f),
+        static_cast<int>(settings.maxEnemySpeed * 10000.0f))) / 10000.0f;
 }
 
 Enemy::~Enemy() {
@@ -57,7 +57,7 @@ void Enemy::Update(float deltaTime) {
 }
 
 void Enemy::Draw() const {
-    DrawModel(*model, position, 0.5f, WHITE);
+    DrawModel(*model, position, 0.33f, WHITE);
 }
 
 BoundingBox Enemy::GetBounds() const {

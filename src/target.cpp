@@ -3,10 +3,11 @@
 
 Target* Target::currentTarget = nullptr;
 
-Target::Target(Vector3 position) {
+Target::Target(Vector3 position, bool setMain) {
     this->position = position;
     color = GREEN;
-    currentTarget = this;
+    if(setMain)
+        currentTarget = this;
 }
 
 Target::~Target() {

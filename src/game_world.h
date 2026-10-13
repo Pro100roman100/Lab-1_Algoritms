@@ -1,7 +1,7 @@
 #pragma once
 
 #include <raylib.h>
-#include <list>
+#include <vector>
 
 #include "scope_marker.h"
 #include "log.h"
@@ -25,24 +25,27 @@ public:
 	bool updateFrustum = true;
 
 	void InitWorld();
-	void ReloadWorld();
+	void ClearWorld();
 
 	void UpdateWorld(float deltaTime);
-	void DrawWorld(Camera3D camera);
+	void DrawWorld(Camera3D camera, bool showEditorObjects = false);
 
 	void AddObject(GameObject* object);
 	void RemoveObject(GameObject* object);
+
+	std::vector<GameObject*>& GetObjects();
+
 private:
 	GameWorld();
 
-	std::list<GameObject*> objects;
-	std::list<DrawableObject*> drawableObjects;
-	std::list<UpdatableObject*> updatableObjects;
+	std::vector<GameObject*> objects;
+	std::vector<DrawableObject*> drawableObjects;
+	std::vector<UpdatableObject*> updatableObjects;
 
 	Target* target = nullptr;
 
 	Frustum frustum;
 
-	int visibleObjects;
-	int invisibleObjects;
+	int visibleObjects = 0;
+	int invisibleObjects = 0;
 };
