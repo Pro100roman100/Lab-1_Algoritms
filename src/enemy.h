@@ -6,8 +6,9 @@
 
 #include "game_settings.h"
 #include "game_object.h"
+#include "physics_object.h"
 
-class Enemy : public DrawableObject, public UpdatableObject {
+class Enemy : public DrawableObject, public UpdatableObject, public PhysicsObject {
 public:
 	Enemy(Vector3 position);
 	~Enemy();

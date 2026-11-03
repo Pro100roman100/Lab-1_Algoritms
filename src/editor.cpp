@@ -1,6 +1,8 @@
 #include "editor.h"
 #include "camera_marker.h"
+#include "dynamic_sphere.h"
 #include "game_world.h"
+#include "skittle.h"
 #include <cmath>
 
 Editor::Editor() {
@@ -56,6 +58,12 @@ void Editor::Update(Camera3D camera, float deltaTime) {
 	if (IsKeyPressed(KEY_FOUR)) {
 		selectedIndex = selectedIndex == 4 ? 0 : 4;
 	}
+	if (IsKeyPressed(KEY_FIVE)) {
+		selectedIndex = selectedIndex == 5 ? 0 : 5;
+	}
+	if (IsKeyPressed(KEY_SIX)) {
+		selectedIndex = selectedIndex == 6 ? 0 : 6;
+	}
 
 	SelectObject(selectedIndex);
 	if (currentObject == nullptr)
@@ -101,36 +109,22 @@ void Editor::Draw(Camera3D camera) {
 }
 
 bool Editor::GetObjectPosition(Ray cameraRay, Vector3& output) {
+	
 	RayCollision collision{};
 	collision.distance = FLT_MAX;
 	collision.hit = false;
 
-	BoundingBox hitBounds{};
-	RayCollision newCollision;
+	DrawableObject* hitObject = nullptr;
+	GameWorld::GetInstance().Raycast(cameraRay, collision, hitObject);
 
-	for (GameObject* object : GameWorld::GetInstance().GetObjects()) {
-		if (object->active) {
-			if (DrawableObject* drawObj = dynamic_cast<DrawableObject*>(object)) {
-				newCollision = GetRayCollisionBox(cameraRay, drawObj->GetBounds());
-				if (newCollision.hit && newCollision.distance < collision.distance) {
-					collision = newCollision;
-					hitBounds = drawObj->GetBounds();
-				}
-			}
-		}
-	}
-
-	if (!collision.hit) {
-		newCollision = GetRayCollisionQuad(
+	if (!collision.hit || hitObject == nullptr) {
+		collision = GetRayCollisionQuad(
 			cameraRay,
 			{ -1000.0f, 0.0f,  1000.0f },
 			{ 1000.0f, 0.0f, 1000.0f },
 			{ 1000.0f, 0.0f, -1000.0f },
 			{ -1000.0f, 0.0f, -1000.0f }
 		);
-		if (newCollision.hit) {
-			collision = newCollision;
-		}
 	}
 
 	if (collision.hit && collision.distance < 100.0f) {
@@ -167,6 +161,12 @@ void Editor::SelectObject(int index) {
 		break;
 	case 4:
 		currentObject = new CameraMarker({ 0.0f, 0.0f, 0.0f });
+		break;
+	case 5:
+		currentObject = new DynamicSphere({ 0.0f, 0.0f, 0.0f });
+		break;
+	case 6:
+		currentObject = new Skittle({ 0.0f, 0.0f, 0.0f });
 		break;
 	default:
 		currentObject = nullptr;

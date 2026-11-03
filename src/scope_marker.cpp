@@ -3,6 +3,7 @@
 #define NOUSER
 #define NOGDI
 #include <windows.h>
+#include <algorithm>
 
 #include "scope_marker.h"
 
@@ -31,15 +32,18 @@ ScopeMarker::~ScopeMarker() {
 }
 
 void ScopeMarker::BeginFrame() {
-	averageMarkers.resize(markers.size());
-
-	for (int i = 0; i < markers.size(); i++) {
-		if (markers[i].name == averageMarkers[i].name)
-			averageMarkers[i].duration = (markers[i].duration + averageMarkers[i].duration) / 2;
+	std::vector<MarkerData> frameAverages;
+	for (const MarkerData& marker : markers) {
+		auto existing = std::find_if(averageMarkers.begin(), averageMarkers.end(), [&](const MarkerData& averageMarker) {
+			return averageMarker.name == marker.name && averageMarker.category == marker.category;
+		});
+		if (existing == averageMarkers.end())
+			frameAverages.push_back(marker);
 		else
-			averageMarkers[i] = markers[i];
+			frameAverages.push_back({ marker.name, marker.category, (marker.duration + existing->duration) / 2 });
 	}
 
+	averageMarkers.swap(frameAverages);
 	markers.clear();
 }
 

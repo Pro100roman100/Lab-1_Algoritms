@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include "scope_marker.h"
 
 class Frustum {
 public:

@@ -1,4 +1,6 @@
 #include "map_save.h"
+#include "dynamic_sphere.h"
+#include "skittle.h"
 
 #include <sstream>
 #include <vector>
@@ -28,7 +30,7 @@ bool MapSave::LoadFromFile(std::string filename) {
 		std::string extra;
 		if (!(record >> type >> position.x >> position.y >> position.z) ||
 			record >> extra ||
-			type < Objects::Cube1x1Pos || type > Objects::CameraPos) {
+			type < Objects::Cube1x1Pos || type > Objects::SkittlePos) {
 			LOG("Invalid record in map file " + filename + ".map");
 			return false;
 		}
@@ -40,29 +42,38 @@ bool MapSave::LoadFromFile(std::string filename) {
 	world.ClearWorld();
 	bool targetLoaded = false;
 	bool cameraLoaded = false;
+	std::vector<GameObject*> parcedObjects;
 	for (const MapObject& object : objects) {
 		switch (object.type) {
 		case Objects::Cube1x1Pos:
-			world.AddObject(new StaticCube(object.position, { 1.0f, 1.0f, 1.0f }));
+			parcedObjects.push_back(new StaticCube(object.position, { 1.0f, 1.0f, 1.0f }));
 			break;
 		case Objects::Cube10x10Pos:
-			world.AddObject(new StaticCube(object.position, { 10.0f, 1.0f, 10.0f }));
+			parcedObjects.push_back(new StaticCube(object.position, { 10.0f, 1.0f, 10.0f }));
 			break;
 		case Objects::TargetPos:
 			if (!targetLoaded) {
-				world.AddObject(new Target(object.position));
+				parcedObjects.push_back(new Target(object.position));
 				targetLoaded = true;
 			}
 			break;
+		case Objects::DynamicSpherePos:
+			parcedObjects.push_back(new DynamicSphere(object.position));
+			break;
+		case Objects::SkittlePos:
+			parcedObjects.push_back(new Skittle(object.position));
+			break;
 		case Objects::CameraPos:
 			if (!cameraLoaded) {
-				world.AddObject(new CameraMarker(object.position));
+				parcedObjects.push_back(new CameraMarker(object.position));
 				PlayerCamera::GetCamera().SetPosition(object.position);
 				cameraLoaded = true;
 			}
 			break;
 		}
 	}
+	world.AddSceneObjects(parcedObjects);
+	MapSave::SaveToFile("temp");
 
 	LOG("Map loaded from " + filename + ".map");
 	return true;
@@ -78,7 +89,10 @@ bool MapSave::SaveToFile(std::string filename) {
 	bool targetSaved = false;
 	bool cameraSaved = false;
 	for (GameObject* object : GameWorld::GetInstance().GetObjects()) {
-		if (auto cube = dynamic_cast<StaticCube*>(object)) {
+		if (auto skittle = dynamic_cast<Skittle*>(object)) {
+			mapFile << Objects::SkittlePos << " " << skittle->position.x << " " << skittle->position.y << " " << skittle->position.z << std::endl;
+		}
+		else if (auto cube = dynamic_cast<StaticCube*>(object)) {
 			if(abs(cube->size.x - 10.0f) < 0.001f)
 				mapFile << Objects::Cube10x10Pos << " " << cube->position.x << " " << cube->position.y << " " << cube->position.z << std::endl;
 			else
@@ -99,6 +113,9 @@ bool MapSave::SaveToFile(std::string filename) {
 			}
 			mapFile << Objects::CameraPos << " " << camera->position.x << " " << camera->position.y << " " << camera->position.z << std::endl;
 			cameraSaved = true;
+		}
+		else if (auto sphere = dynamic_cast<DynamicSphere*>(object)) {
+			mapFile << Objects::DynamicSpherePos << " " << sphere->position.x << " " << sphere->position.y << " " << sphere->position.z << std::endl;
 		}
 	}
 

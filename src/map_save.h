@@ -13,7 +13,9 @@ enum Objects {
 	Cube1x1Pos,
 	Cube10x10Pos,
 	TargetPos,
-	CameraPos
+	CameraPos,
+	DynamicSpherePos,
+	SkittlePos
 };
 
 class MapSave {

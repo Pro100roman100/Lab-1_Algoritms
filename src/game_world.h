@@ -6,6 +6,8 @@
 #include "scope_marker.h"
 #include "log.h"
 #include "game_object.h"
+#include "uniform_grid.h"
+#include "physics_world.h"
 
 #include "enemy.h"
 #include "static_cube.h"
@@ -31,16 +33,21 @@ public:
 	void DrawWorld(Camera3D camera, bool showEditorObjects = false);
 
 	void AddObject(GameObject* object);
+	void AddSceneObjects(std::vector<GameObject*>& objects);
 	void RemoveObject(GameObject* object);
 
 	std::vector<GameObject*>& GetObjects();
+	void Raycast(Ray ray, RayCollision& output, DrawableObject*& object);
+
+	void UpdatePosition(DrawableObject* object, Vector3 transform);
 
 private:
 	GameWorld();
 
 	std::vector<GameObject*> objects;
-	std::vector<DrawableObject*> drawableObjects;
+	UniformGrid<DrawableObject> drawableObjects;
 	std::vector<UpdatableObject*> updatableObjects;
+	PhysicsWorld physicsWorld;
 
 	Target* target = nullptr;
 

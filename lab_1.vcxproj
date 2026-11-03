@@ -301,23 +301,28 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\dynamic_sphere.h" />
+    <ClInclude Include="src\game_object.h" />
+    <ClInclude Include="src\physics_object.h" />
     <ClInclude Include="src\camera_marker.h" />
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\editor.h" />
     <ClInclude Include="src\editor_camera.h" />
     <ClInclude Include="src\enemy_spawner.h" />
     <ClInclude Include="src\frustum.h" />
-    <ClInclude Include="src\game_object.h" />
     <ClInclude Include="src\game_settings.h" />
     <ClInclude Include="src\config_loader.h" />
     <ClInclude Include="src\enemy.h" />
     <ClInclude Include="src\game_world.h" />
     <ClInclude Include="src\log.h" />
     <ClInclude Include="src\map_save.h" />
+    <ClInclude Include="src\physics_world.h" />
     <ClInclude Include="src\player_camera.h" />
     <ClInclude Include="src\scope_marker.h" />
+    <ClInclude Include="src\skittle.h" />
     <ClInclude Include="src\static_cube.h" />
     <ClInclude Include="src\target.h" />
+    <ClInclude Include="src\uniform_grid.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\camera_marker.cpp" />
@@ -332,13 +337,17 @@
     <ClCompile Include="src\log.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\map_save.cpp" />
+    <ClCompile Include="src\physics_object.cpp" />
+    <ClCompile Include="src\physics_world.cpp" />
     <ClCompile Include="src\player_camera.cpp" />
     <ClCompile Include="src\scope_marker.cpp" />
+    <ClCompile Include="src\skittle.cpp" />
     <ClCompile Include="src\static_cube.cpp" />
     <ClCompile Include="src\target.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico" />
+    <None Include="test.map" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\application.rc" />

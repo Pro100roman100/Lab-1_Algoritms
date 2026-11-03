@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -45,9 +45,6 @@
     <ClInclude Include="src\game_world.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\game_object.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\enemy_spawner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -64,6 +61,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\map_save.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uniform_grid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\physics_object.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\game_object.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\physics_world.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\dynamic_sphere.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\skittle.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -116,11 +131,21 @@
     <ClCompile Include="src\map_save.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\physics_object.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\physics_world.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\skittle.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico">
       <Filter>Windows Resource Files</Filter>
     </None>
+    <None Include="test.map" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\application.rc">

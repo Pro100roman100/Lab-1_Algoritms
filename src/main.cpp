@@ -37,7 +37,7 @@ int main() {
 
 	while (!WindowShouldClose()) {
 		// UPDATE
-		float deltaTime = GetFrameTime();
+		float deltaTime = std::min(GetFrameTime(), 0.25f);
 		console.Update();
 
 		Logger::BeginFrame(deltaTime);
@@ -54,7 +54,9 @@ int main() {
 			}
 			if (IsKeyPressed(KEY_F1)) {
 				editorCamera.SetFromCamera(camera.GetCameraData());
-				MapSave::SaveToFile("temp");
+				if (inEditor) {
+					MapSave::SaveToFile("temp");
+				}
 				MapSave::LoadFromFile("temp");
 
 				if (!inEditor) {

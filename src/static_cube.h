@@ -2,8 +2,9 @@
 #include <raylib.h>
 
 #include "game_object.h"
+#include "physics_object.h"
 
-class StaticCube : public DrawableObject {
+class StaticCube : public DrawableObject, public PhysicsObject {
 public:
 	Vector3 size;
 

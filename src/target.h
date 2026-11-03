@@ -2,8 +2,9 @@
 #include <raylib.h>
 
 #include "game_object.h"
+#include "physics_object.h"
 
-class Target : public DrawableObject {
+class Target : public DrawableObject, public PhysicsObject {
 public:
 	Target(Vector3 position, bool setMain = true);
 	~Target();

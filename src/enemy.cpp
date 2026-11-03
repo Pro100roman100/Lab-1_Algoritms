@@ -7,10 +7,11 @@ std::unique_ptr<Model> Enemy::model;
 std::unique_ptr<Texture2D> Enemy::texture;
 
 void Enemy::Move(Vector3 transform) {
-    position += transform;
+    GameWorld::GetInstance().UpdatePosition(this, transform);
 }
 
-Enemy::Enemy(Vector3 position) {
+Enemy::Enemy(Vector3 position)
+    : PhysicsObject(ObjectType::_kinematic, new BoxCollider(), 0.99f) {
     const GameSettings& settings = GameSettings::GetInstance();
     this->position = position;
     EnemySpawner::enemyCount++;
@@ -37,6 +38,7 @@ Enemy::~Enemy() {
 void Enemy::Update(float deltaTime) {
     Target* targetObject = Target::GetCurrentTarget();
     if (targetObject == nullptr) {
+        properties.velocity = {};
         return;
     }
 
@@ -45,7 +47,8 @@ void Enemy::Update(float deltaTime) {
     direction.y = 0;
     direction = Vector3Normalize(direction);
 
-    Move(direction * speed * deltaTime);
+    properties.velocity = direction * speed;
+    Move(properties.velocity * deltaTime);
 
     Vector3 target = targetPosition;
     target.y = position.y;

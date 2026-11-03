@@ -64,7 +64,7 @@ void EditorCamera::Update(float deltaTime) {
 	if (IsKeyDown(KEY_D)) moveDirection += right;
 	if (IsKeyDown(KEY_A)) moveDirection -= right;
 	if (IsKeyDown(KEY_SPACE)) moveDirection += viewUp;
-	if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) moveDirection -= viewUp;
+	if (IsKeyDown(KEY_LEFT_CONTROL)) moveDirection -= viewUp;
 
 	if (Vector3LengthSqr(moveDirection) > 0.0f) {
 		moveDirection = Vector3Normalize(moveDirection);

@@ -3,7 +3,8 @@
 
 Target* Target::currentTarget = nullptr;
 
-Target::Target(Vector3 position, bool setMain) {
+Target::Target(Vector3 position, bool setMain) 
+    : PhysicsObject(ObjectType::_static, new BoxCollider({1.f, 2.f, 1.f}), 0.5f) {
     this->position = position;
     color = GREEN;
     if(setMain)
