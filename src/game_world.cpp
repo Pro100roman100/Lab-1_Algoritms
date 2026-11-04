@@ -101,7 +101,6 @@ void GameWorld::AddObject(GameObject* object) {
 void GameWorld::AddSceneObjects(std::vector<GameObject*>& objects) {
     BoundingBox bounds = drawableObjects.CalculateBoundingBox(objects);
     drawableObjects.GenerateGrid(bounds, { 10.f,10.f,10.f });
-    physicsWorld.GenerateGrid(bounds, { 2.5f,2.5f,2.5f });
     for (auto object : objects) {
         AddObject(object);
     }
@@ -182,12 +181,14 @@ void GameWorld::Raycast(Ray ray, RayCollision& output, DrawableObject*& object) 
     }
 }
 
-void GameWorld::UpdatePosition(DrawableObject* object, Vector3 transform) {
-    if (auto* physical = dynamic_cast<PhysicsObject*>(object)) {
-        drawableObjects.RemoveObject(object);
-        physicsWorld.MoveObject(physical, transform);
-        drawableObjects.AddObject(object);
+void GameWorld::MoveObject(GameObject* object, Vector3 transform) {
+    if (auto* drawable = dynamic_cast<DrawableObject*>(object)) {
+        if (auto* physical = dynamic_cast<PhysicsObject*>(object)) {
+            drawableObjects.RemoveObject(drawable);
+            physicsWorld.MoveObject(physical, transform);
+            drawableObjects.AddObject(drawable);
+        }
+        else
+            drawableObjects.MoveObject(drawable, transform);
     }
-    else
-        drawableObjects.MoveObject(object, transform);
 }

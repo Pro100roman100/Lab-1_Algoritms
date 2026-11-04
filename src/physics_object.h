@@ -23,12 +23,12 @@ public:
 struct BoxCollider : Collider {
     Vector3 size = {};
 
-    explicit BoxCollider(Vector3 size = {1.f, 1.f, 1.f}, float mass = 1.0f);
+    BoxCollider(Vector3 size = {1.f, 1.f, 1.f}, float mass = 1.0f);
 };
 struct SphereCollider : Collider {
     float radius = 0.0f;
 
-    explicit SphereCollider(float radius = 1.0f, float mass = 1.0f);
+    SphereCollider(float radius = 1.0f, float mass = 1.0f);
 };
 
 struct PhysicsProperty {
@@ -41,6 +41,16 @@ struct PhysicsProperty {
 
     ObjectType type = ObjectType::_static;
     Collider* collider = nullptr;
+};
+
+class PhysicsObject;
+
+struct CollisionResult {
+    PhysicsObject* objA;
+    PhysicsObject* objB;
+    Vector3 position;
+    Vector3 normal;
+    float penetration;
 };
 
 class PhysicsObject : public virtual GameObject {
@@ -62,6 +72,10 @@ public:
 
     void RotateObject(Quaternion rotation);
     void ApplyAngularImpulse(Vector3 impulse, Vector3 point);
+
+    virtual void OnCollisionEnter(PhysicsObject* other, const CollisionResult& result) {}
+    virtual void OnCollisionStay(PhysicsObject* other, const CollisionResult& result) {}
+    virtual void OnCollisionExit(PhysicsObject* other) {}
 
     BoundingBox GetBounds() const override;
 protected:

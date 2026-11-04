@@ -39,7 +39,7 @@ public:
 	std::vector<GameObject*>& GetObjects();
 	void Raycast(Ray ray, RayCollision& output, DrawableObject*& object);
 
-	void UpdatePosition(DrawableObject* object, Vector3 transform);
+	void MoveObject(GameObject* object, Vector3 transform);
 
 private:
 	GameWorld();
