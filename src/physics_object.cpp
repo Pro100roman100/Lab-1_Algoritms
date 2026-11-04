@@ -30,6 +30,9 @@ PhysicsObject::PhysicsObject(ObjectType type, Collider* collider, float elastici
     properties.collider = collider;
     properties.elasticity = elasticity;
     properties.type = type;
+
+    if (type != ObjectType::_dynamic)
+        properties.collider->inverseMass = 0;
 }
 
 PhysicsProperty const PhysicsObject::GetProperties() const {

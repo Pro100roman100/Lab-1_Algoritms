@@ -17,7 +17,7 @@ void PhysicsWorld::Update(float deltaTime) {
         auto& properties = object->GetProperties();
 
         object->AddForce(Vector3Scale(Vector3{ 0.f, -9.8f, 0.f }, properties.collider->mass * deltaTime));
-        object->AddForce(Vector3Scale(properties.velocity, -0.01f));
+        object->AddForce(Vector3Scale(properties.velocity, -0.05f * deltaTime));
         object->ApplyAngularDamping(0.05f);
     }
 
@@ -75,16 +75,14 @@ void PhysicsWorld::RemoveObject(PhysicsObject* object) {
 }
 
 void PhysicsWorld::ApplyForces(float deltaTime) {
-    SCOPE_MARKER(Apply_Forces, Physics);
-    const float step = deltaTime > 0.0f ? deltaTime : 0.0f;
-    if (step == 0.0f) 
-        return;
+    SCOPE_MARKER(ApplyForces, Physics);
+    const float step = std::min(deltaTime, 0.02f);
 
     for (PhysicsObject* object : dynamicObjects) {
         if (object == nullptr || !object->active) continue;
 
         const PhysicsProperty properties = object->GetProperties();
-        if (properties.type == ObjectType::_static || properties.collider == nullptr ||
+        if (properties.type != ObjectType::_dynamic || properties.collider == nullptr ||
             properties.collider->inverseMass <= 0.0f) {
             continue;
         }
@@ -114,40 +112,20 @@ void PhysicsWorld::ApplyForces(float deltaTime) {
 }
 
 void PhysicsWorld::SolveCollisions() {
+    SCOPE_MARKER(SolveCollisions, Physics);
     std::vector<CollisionResult> contacts;
     std::set<CollisionPair> currentCollisions;
 
     // 1. Широка фаза
-    for (size_t i = 0; i < dynamicObjects.size(); ++i) {
-        PhysicsObject* objA = dynamicObjects[i];
-        if (!objA || !objA->active) continue;
+    {
+        SCOPE_MARKER(BroadPhase, Physics);
+        for (size_t i = 0; i < dynamicObjects.size(); ++i) {
+            PhysicsObject* objA = dynamicObjects[i];
+            if (!objA || !objA->active) continue;
 
-        // Динамічні vs Статичні
-        std::vector<PhysicsObject*> staticHits = staticObjects.CheckIntersection(objA->GetBounds());
-        for (PhysicsObject* objB : staticHits) {
-            CollisionResult result;
-            if (CheckCollision(objA, objB, result)) {
-                contacts.push_back(result);
-
-                CollisionPair pair = (objA < objB) ? std::make_pair(objA, objB) : std::make_pair(objB, objA);
-                currentCollisions.insert(pair);
-
-                if (previousCollisions.find(pair) == previousCollisions.end()) {
-                    objA->OnCollisionEnter(objB, result);
-                    objB->OnCollisionEnter(objA, result);
-                }
-                else {
-                    objA->OnCollisionStay(objB, result);
-                    objB->OnCollisionStay(objA, result);
-                }
-            }
-        }
-
-        // Динамічні vs Динамічні
-        for (size_t j = i + 1; j < dynamicObjects.size(); ++j) {
-            PhysicsObject* objB = dynamicObjects[j];
-            if (!objB || !objB->active) continue;
-            if (CheckCollisionBoxes(objA->GetBounds(), objB->GetBounds())) {
+            // Динамічні vs Статичні
+            std::vector<PhysicsObject*> staticHits = staticObjects.CheckIntersection(objA->GetBounds());
+            for (PhysicsObject* objB : staticHits) {
                 CollisionResult result;
                 if (CheckCollision(objA, objB, result)) {
                     contacts.push_back(result);
@@ -165,8 +143,33 @@ void PhysicsWorld::SolveCollisions() {
                     }
                 }
             }
+
+            // Динамічні vs Динамічні
+            for (size_t j = i + 1; j < dynamicObjects.size(); ++j) {
+                PhysicsObject* objB = dynamicObjects[j];
+                if (!objB || !objB->active) continue;
+                if (CheckCollisionBoxes(objA->GetBounds(), objB->GetBounds())) {
+                    CollisionResult result;
+                    if (CheckCollision(objA, objB, result)) {
+                        contacts.push_back(result);
+
+                        CollisionPair pair = (objA < objB) ? std::make_pair(objA, objB) : std::make_pair(objB, objA);
+                        currentCollisions.insert(pair);
+
+                        if (previousCollisions.find(pair) == previousCollisions.end()) {
+                            objA->OnCollisionEnter(objB, result);
+                            objB->OnCollisionEnter(objA, result);
+                        }
+                        else {
+                            objA->OnCollisionStay(objB, result);
+                            objB->OnCollisionStay(objA, result);
+                        }
+                    }
+                }
+            }
         }
     }
+    
 
     for (const auto& pair : previousCollisions) {
         if (currentCollisions.find(pair) == currentCollisions.end()) {
@@ -177,10 +180,13 @@ void PhysicsWorld::SolveCollisions() {
 
     previousCollisions = currentCollisions;
 
-    const int solverIterations = 8;
-    for (int i = 0; i < solverIterations; ++i) {
-        for (auto& contact : contacts) {
-            ResolveContact(contact);
+    {
+        SCOPE_MARKER(NarrowPhase, Physics);
+        const int solverIterations = 1;
+        for (int i = 0; i < solverIterations; ++i) {
+            for (auto& contact : contacts) {
+                ResolveContact(contact);
+            }
         }
     }
 }
@@ -239,29 +245,40 @@ bool PhysicsWorld::BoxBoxCollision(PhysicsObject* objA, BoxCollider* a, PhysicsO
     BoundingBox boxA = objA->GetBounds();
     BoundingBox boxB = objB->GetBounds();
 
-    float overlapX = std::min(boxA.max.x, boxB.max.x) - std::max(boxA.min.x, boxB.min.x);
-    float overlapY = std::min(boxA.max.y, boxB.max.y) - std::max(boxA.min.y, boxB.min.y);
-    float overlapZ = std::min(boxA.max.z, boxB.max.z) - std::max(boxA.min.z, boxB.min.z);
+    Vector3 centerA = { (boxA.min.x + boxA.max.x) * 0.5f, (boxA.min.y + boxA.max.y) * 0.5f, (boxA.min.z + boxA.max.z) * 0.5f };
+    Vector3 centerB = { (boxB.min.x + boxB.max.x) * 0.5f, (boxB.min.y + boxB.max.y) * 0.5f, (boxB.min.z + boxB.max.z) * 0.5f };
 
-    if (overlapX <= 0 || overlapY <= 0 || overlapZ <= 0) return false;
+    Vector3 halfExtentsA = { (boxA.max.x - boxA.min.x) * 0.5f, (boxA.max.y - boxA.min.y) * 0.5f, (boxA.max.z - boxA.min.z) * 0.5f };
+    Vector3 halfExtentsB = { (boxB.max.x - boxB.min.x) * 0.5f, (boxB.max.y - boxB.min.y) * 0.5f, (boxB.max.z - boxB.min.z) * 0.5f };
+
+    Vector3 distance = Vector3Subtract(centerB, centerA);
+
+    float overlapX = (halfExtentsA.x + halfExtentsB.x) - std::abs(distance.x);
+    if (overlapX <= 0.0f) return false;
+
+    float overlapY = (halfExtentsA.y + halfExtentsB.y) - std::abs(distance.y);
+    if (overlapY <= 0.0f) return false;
+
+    float overlapZ = (halfExtentsA.z + halfExtentsB.z) - std::abs(distance.z);
+    if (overlapZ <= 0.0f) return false;
 
     result.objA = objA;
     result.objB = objB;
 
     if (overlapX < overlapY && overlapX < overlapZ) {
         result.penetration = overlapX;
-        result.normal = (boxA.min.x < boxB.min.x) ? Vector3{ 1, 0, 0 } : Vector3{ -1, 0, 0 };
+        result.normal = (distance.x < 0) ? Vector3{ -1, 0, 0 } : Vector3{ 1, 0, 0 };
     }
     else if (overlapY < overlapZ) {
         result.penetration = overlapY;
-        result.normal = (boxA.min.y < boxB.min.y) ? Vector3{ 0, 1, 0 } : Vector3{ 0, -1, 0 };
+        result.normal = (distance.y < 0) ? Vector3{ 0, -1, 0 } : Vector3{ 0, 1, 0 };
     }
     else {
         result.penetration = overlapZ;
-        result.normal = (boxA.min.z < boxB.min.z) ? Vector3{ 0, 0, 1 } : Vector3{ 0, 0, -1 };
+        result.normal = (distance.z < 0) ? Vector3{ 0, 0, -1 } : Vector3{ 0, 0, 1 };
     }
 
-    result.position = Vector3Scale(Vector3Add(objA->position, objB->position), 0.5f);
+    result.position = Vector3Add(centerA, Vector3Scale(result.normal, halfExtentsA.x)); // Орієнтовна точка зіткнення
     return true;
 }
 bool PhysicsWorld::SphereBoxCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionResult& result) {
@@ -324,8 +341,8 @@ void PhysicsWorld::ResolveContact(CollisionResult& contact) {
     if (invMassB > 0.0f) 
         objB->AddImpulse(impulse);
 
-    const float percent = 0.2f;
-    const float slop = 0.01f;
+    const float percent = 0.8f;
+    const float slop = 0.05f;
     Vector3 correction = Vector3Scale(contact.normal, (std::max(contact.penetration - slop, 0.0f) / (invMassA + invMassB)) * percent);
 
     if (invMassA > 0.0f) {

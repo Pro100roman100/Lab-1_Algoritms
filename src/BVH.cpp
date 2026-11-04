@@ -26,7 +26,7 @@ void BVH::AddObject(PhysicsObject* object) {
 
 void BVH::RemoveObject(PhysicsObject* object) {
     for (int i = 0; i < objects.size(); i++) {
-        if (objects[i] = object) {
+        if (objects[i] == object) {
             objects[i] = objects.back();
             objects.pop_back();
         }
