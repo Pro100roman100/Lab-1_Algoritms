@@ -33,7 +33,7 @@ void BVH::RemoveObject(PhysicsObject* object) {
     }
 }
 
-std::vector<PhysicsObject*>& const BVH::GetObjects()
+const std::vector<PhysicsObject*>& BVH::GetObjects()
 {
     return objects;
 }

@@ -1,9 +1,45 @@
 #include "physics_object.h"
 #include <cmath>
 
+BoundingBox BoxCollider::GetBounds(const Quaternion& rotation)
+{
+    if (!QuaternionEquals(rotation, lastRot)) {
+        lastRot = rotation;
+
+        const Matrix r = QuaternionToMatrix(rotation);
+        const Vector3 half = size / 2;
+        const Vector3 extent = {
+            fabsf(r.m0) * half.x + fabsf(r.m4) * half.y + fabsf(r.m8) * half.z,
+            fabsf(r.m1) * half.x + fabsf(r.m5) * half.y + fabsf(r.m9) * half.z,
+            fabsf(r.m2) * half.x + fabsf(r.m6) * half.y + fabsf(r.m10) * half.z
+        };
+        bounds.min = Vector3Negate(extent) * 1.05f;
+        bounds.max = extent * 1.05f;
+    }
+    return bounds;
+}
+
+BoundingBox SphereCollider::GetBounds(const Quaternion&)
+{
+    return bounds;
+}
+
+BoundingBox PhysicsObject::GetBounds() const {
+    if (!properties.collider) {
+        return { position, position };
+    }
+    const BoundingBox bounds = properties.collider->GetBounds(rotation);
+    return {
+        bounds.min + position,
+        bounds.max + position
+    };
+}
+
 BoxCollider::BoxCollider(Vector3 size, float mass) : size(size) {
     const float radius = Vector3Length(size) * 0.5f;
-    maxBounds = { Vector3{ -radius, -radius, -radius }, Vector3{ radius, radius, radius } };
+    bounds = GetBounds(QuaternionIdentity());
+
+    lastRot = QuaternionIdentity();
 
     this->mass = mass > 0.0f ? mass : 0.0f;
     inverseMass = this->mass > 0.0f ? 1.0f / this->mass : 0.0f;
@@ -15,7 +51,7 @@ BoxCollider::BoxCollider(Vector3 size, float mass) : size(size) {
 
 SphereCollider::SphereCollider(float radius, float mass) : radius(radius) {
     const float extent = std::abs(radius);
-    maxBounds = { Vector3{ -extent, -extent, -extent }, Vector3{ extent, extent, extent } };
+    bounds = { Vector3{ -extent, -extent, -extent }, Vector3{ extent, extent, extent } };
 
     this->mass = mass > 0.0f ? mass : 0.0f;
     inverseMass = this->mass > 0.0f ? 1.0f / this->mass : 0.0f;
@@ -35,7 +71,8 @@ PhysicsObject::PhysicsObject(ObjectType type, Collider* collider, float elastici
         properties.collider->inverseMass = 0;
 }
 
-PhysicsProperty const PhysicsObject::GetProperties() const {
+PhysicsProperty const PhysicsObject::GetProperties() const
+{
     return properties;
 }
 
@@ -71,17 +108,6 @@ void PhysicsObject::ApplyAngularDamping(float damping) {
 void PhysicsObject::RotateObject(Quaternion rotation) {
     this->rotation = QuaternionNormalize(QuaternionMultiply(this->rotation, rotation));
 }
-
-BoundingBox PhysicsObject::GetBounds() const {
-    if (!properties.collider) {
-        return { position, position };
-    }
-    return {
-        properties.collider->maxBounds.min + position,
-        properties.collider->maxBounds.max + position
-    };
-}
-
 
 void PhysicsObject::ApplyAngularImpulse(Vector3 impulse, Vector3 point) {
     if (!properties.collider || properties.collider->inverseMass <= 0.0f) {

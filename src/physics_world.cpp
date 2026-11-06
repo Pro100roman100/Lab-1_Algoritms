@@ -235,7 +235,7 @@ bool PhysicsWorld::SphereSphereCollision(PhysicsObject* objA, SphereCollider* a,
         result.penetration = a->radius;
     }
     else {
-        result.normal = Vector3Scale(diff, 1.0f / dist); // Нормаль від A до B
+        result.normal = Vector3Scale(diff, 1.0f / dist);
         result.penetration = radiusSum - dist;
     }
     result.position = Vector3Add(objA->position, Vector3Scale(result.normal, a->radius));
@@ -278,7 +278,7 @@ bool PhysicsWorld::BoxBoxCollision(PhysicsObject* objA, BoxCollider* a, PhysicsO
         result.normal = (distance.z < 0) ? Vector3{ 0, 0, -1 } : Vector3{ 0, 0, 1 };
     }
 
-    result.position = Vector3Add(centerA, Vector3Scale(result.normal, halfExtentsA.x)); // Орієнтовна точка зіткнення
+    result.position = Vector3Add(centerA, Vector3Scale(result.normal, halfExtentsA.x));
     return true;
 }
 bool PhysicsWorld::SphereBoxCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionResult& result) {
@@ -307,7 +307,7 @@ bool PhysicsWorld::SphereBoxCollision(PhysicsObject* objA, SphereCollider* a, Ph
     }
     else {
         result.penetration = a->radius - dist;
-        result.normal = Vector3Scale(diff, -1.0f / dist); // Нормаль від Сфери (A) до Коробки (B)
+        result.normal = Vector3Scale(diff, -1.0f / dist);
         result.position = closestPoint;
     }
     return true;

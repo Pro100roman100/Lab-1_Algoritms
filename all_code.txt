@@ -1,0 +1,3550 @@
+﻿
+
+=== BVH.cpp ===
+#include "BVH.h"
+
+BoundingBox BVH::CombineBoxes(const BoundingBox& a, const BoundingBox& b) {
+    return BoundingBox{
+        Vector3{ std::min(a.min.x, b.min.x), std::min(a.min.y, b.min.y), std::min(a.min.z, b.min.z) },
+        Vector3{ std::max(a.max.x, b.max.x), std::max(a.max.y, b.max.y), std::max(a.max.z, b.max.z) }
+    };
+}
+
+Vector3 BVH::GetBoxCenter(const BoundingBox& box) {
+    return Vector3{
+        (box.min.x + box.max.x) * 0.5f,
+        (box.min.y + box.max.y) * 0.5f,
+        (box.min.z + box.max.z) * 0.5f
+    };
+}
+
+void BVH::AddObject(PhysicsObject* object) {
+    if (!object) 
+        return;
+
+    if (std::find(objects.begin(), objects.end(), object) == objects.end()) {
+        objects.push_back(object);
+    }
+}
+
+void BVH::RemoveObject(PhysicsObject* object) {
+    for (int i = 0; i < objects.size(); i++) {
+        if (objects[i] == object) {
+            objects[i] = objects.back();
+            objects.pop_back();
+        }
+    }
+}
+
+const std::vector<PhysicsObject*>& BVH::GetObjects()
+{
+    return objects;
+}
+
+void BVH::Clear() {
+    objects.clear();
+    root.reset();
+}
+
+void BVH::Draw() const {
+    if (!root) 
+        return;
+
+    struct StackItem {
+        const BVHNode* node;
+        int depth;
+    };
+
+    std::vector<StackItem> stack;
+    stack.reserve(64);
+
+    stack.push_back({ root.get(), 0 });
+
+    while (!stack.empty()) {
+        StackItem current = stack.back();
+        stack.pop_back();
+
+        const BVHNode* node = current.node;
+        int depth = current.depth;
+
+        unsigned char brightness = (unsigned char)std::max(40, 255 - (depth * 25));
+
+        Color boxColor;
+        if (node->IsLeaf()) {
+            boxColor = Color{ brightness, 0, 0, 255 };
+        }
+        else {
+            boxColor = Color{ 0, brightness, 0, 255 };
+        }
+
+        DrawBoundingBox(node->bounds, boxColor);
+
+        if (node->right) {
+            stack.push_back({ node->right.get(), depth + 1 });
+        }
+        if (node->left) {
+            stack.push_back({ node->left.get(), depth + 1 });
+        }
+    }
+}
+
+void BVH::Update() {
+    root.reset();
+    if (objects.empty()) 
+        return;
+
+    std::vector<PhysicsObject*> buildList = objects;
+    root = BuildRecursive(buildList, 0, buildList.size());
+}
+
+std::unique_ptr<BVHNode> BVH::BuildRecursive(std::vector<PhysicsObject*>& objs, size_t start, size_t end) {
+    if (start >= end) 
+        return nullptr;
+
+    auto node = std::make_unique<BVHNode>();
+    size_t count = end - start;
+
+    node->bounds = objs[start]->GetBounds();
+    for (size_t i = start + 1; i < end; ++i) {
+        node->bounds = CombineBoxes(node->bounds, objs[i]->GetBounds());
+    }
+
+    if (count == 1) {
+        node->object = objs[start];
+        return node;
+    }
+
+    Vector3 extent = Vector3Subtract(node->bounds.max, node->bounds.min);
+    int axis = 0;
+    if (extent.y > extent.x && extent.y > extent.z) 
+        axis = 1;
+    else if (extent.z > extent.x && extent.z > extent.y) 
+        axis = 2;
+
+    float splitPos = 0.0f;
+    if (axis == 0) 
+        splitPos = node->bounds.min.x + (extent.x * 0.5f);
+    else if (axis == 1) 
+        splitPos = node->bounds.min.y + (extent.y * 0.5f);
+    else if (axis == 2) 
+        splitPos = node->bounds.min.z + (extent.z * 0.5f);
+
+    size_t mid = start;
+    for (size_t i = start; i < end; ++i) {
+        Vector3 center = GetBoxCenter(objs[i]->GetBounds());
+        float objPos = (axis == 0) ? center.x : ((axis == 1) ? center.y : center.z);
+
+        if (objPos < splitPos) {
+            std::swap(objs[mid], objs[i]);
+            mid++;
+        }
+    }
+
+    if (mid == start || mid == end) {
+        mid = start + count / 2;
+    }
+
+    // Build children
+    node->left = BuildRecursive(objs, start, mid);
+    node->right = BuildRecursive(objs, mid, end);
+
+    return node;
+}
+std::vector<PhysicsObject*> BVH::CheckIntersection(const BoundingBox& bounds) const {
+    std::vector<PhysicsObject*> hits;
+    if (root) {
+        QueryRecursive(root.get(), bounds, hits);
+    }
+    return hits;
+}
+
+void BVH::QueryRecursive(const BVHNode* node, const BoundingBox& bounds, std::vector<PhysicsObject*>& hits) const {
+    if (!node || !CheckCollisionBoxes(node->bounds, bounds)) {
+        return;
+    }
+
+    if (node->IsLeaf()) {
+        hits.push_back(node->object);
+    }
+    else {
+        QueryRecursive(node->left.get(), bounds, hits);
+        QueryRecursive(node->right.get(), bounds, hits);
+    }
+}
+
+
+=== BVH.h ===
+#pragma once
+
+#include <raylib.h>
+#include <vector>
+#include "physics_object.h"
+
+struct BVHNode {
+    BoundingBox bounds;
+    std::unique_ptr<BVHNode> left;
+    std::unique_ptr<BVHNode> right;
+    PhysicsObject* object = nullptr;
+
+    bool IsLeaf() const { return object != nullptr; }
+};
+
+class BVH {
+public:
+    std::unique_ptr<BVHNode> root;
+
+	void Update();
+
+	void AddObject(PhysicsObject* object);
+	void RemoveObject(PhysicsObject* object);
+    const std::vector<PhysicsObject*>&  GetObjects();
+
+    std::vector<PhysicsObject*> CheckIntersection(const BoundingBox& bounds) const;
+
+    void Clear();
+
+    void Draw() const;
+private:
+    std::vector<PhysicsObject*> objects;
+
+    std::unique_ptr<BVHNode> BuildRecursive(std::vector<PhysicsObject*>& objs, size_t start, size_t end);
+    void QueryRecursive(const BVHNode* node, const BoundingBox& bounds, std::vector<PhysicsObject*>& hits) const;
+    
+    static BoundingBox CombineBoxes(const BoundingBox& a, const BoundingBox& b);
+    static Vector3 GetBoxCenter(const BoundingBox& box);
+};
+
+
+=== camera_marker.cpp ===
+#include "camera_marker.h"
+
+CameraMarker::CameraMarker(Vector3 position) {
+	this->position = position;
+}
+
+void CameraMarker::Draw() const {
+	DrawSphere(position, 0.5f, RED);
+}
+
+BoundingBox CameraMarker::GetBounds() const {
+	return{ { position.x - 0.5f, position.y - 0.5f, position.z - 0.5f },
+			{ position.x + 0.5f, position.y + 0.5f, position.z + 0.5f } };
+}
+
+
+=== camera_marker.h ===
+#pragma once
+
+#include "game_object.h"
+
+class CameraMarker : public DrawableObject {
+public:
+    CameraMarker(Vector3 position);
+
+    virtual void Draw() const;
+    virtual BoundingBox GetBounds() const;
+};
+
+
+=== config_loader.cpp ===
+#include "config_loader.h"
+
+#include <fstream>
+#include <sstream>
+
+std::string ConfigLoader::Trim(const std::string& value) {
+	const size_t first = value.find_first_not_of(" \t\r\n");
+	if (first == std::string::npos) {
+		return "";
+	}
+
+	const size_t last = value.find_last_not_of(" \t\r\n");
+	return value.substr(first, last - first + 1);
+}
+
+ParseCode ConfigLoader::ParseFloat(const std::string& value, float& result, float min, float max) {
+	try {
+		const float parsed = std::stof(value);
+		if (parsed <= min || parsed >= max) {
+			return ParseCode::out_of_bounds;
+		}
+		result = parsed;
+		return ParseCode::no_err;
+	}
+	catch (...) {
+		return ParseCode::invalid_value;
+	}
+}
+ParseCode ConfigLoader::ParseInt(const std::string& value, int& result, int min, int max) {
+	try {
+		const int parsed = std::stoi(value);
+		if (parsed < min || parsed > max) {
+			return ParseCode::out_of_bounds;
+		}
+		result = parsed;
+		return ParseCode::no_err;
+	}
+	catch (...) {
+		return ParseCode::invalid_value;
+	}
+}
+
+ParseCode ConfigLoader::SetParameter(std::string& key, std::string& value) {
+	to_lower_case(key);
+	to_lower_case(value);
+	GameSettings& settings = GameSettings::GetInstance();
+
+	if (key == "spawn_interval") {
+		return ParseFloat(value, settings.spawnInterval);
+	}
+	if (key == "spawn_radius") {
+		return ParseFloat(value, settings.spawnRadius);
+	}
+	if (key == "min_enemy_speed") {
+		const float oldValue = settings.minEnemySpeed;
+		if (ParseCode code = ParseFloat(value, settings.minEnemySpeed))
+			return code;
+		else if(settings.minEnemySpeed > settings.maxEnemySpeed) {
+			settings.minEnemySpeed = oldValue;
+		}
+		return ParseCode::no_err;
+	}
+	if (key == "max_enemy_speed") {
+		const float oldValue = settings.maxEnemySpeed;
+		if (ParseCode code = ParseFloat(value, settings.maxEnemySpeed))
+			return code;
+		else if (settings.minEnemySpeed < settings.maxEnemySpeed) {
+			settings.minEnemySpeed = oldValue;
+		}
+		return ParseCode::no_err;
+	}
+	if (key == "max_enemies") {
+		return ParseInt(value, settings.maxEnemies);
+	}
+	if (key == "max_fps") {
+		ParseCode result = ParseInt(value, settings.maxFps, 15);
+		if (result == ParseCode::no_err)
+			SetTargetFPS(GameSettings::GetInstance().maxFps);
+		return result;
+	}
+	if (key == "log_show_time") {
+		return ParseFloat(value, settings.logShowTime);
+	}
+
+	return ParseCode::invalid_name;
+}
+
+std::string ConfigLoader::GetErrorString(ParseCode code, std::string& key, std::string& value) {
+	switch (code) {
+	case ParseCode::no_err:
+		return "";
+	case ParseCode::invalid_name:
+		return "Set " + key + " error: Invalid name";
+	case ParseCode::invalid_value:
+		return "Set " + key + " error: Invalid value " + value;
+	case ParseCode::out_of_bounds:
+		return "Set " + key + " error: Value " + value + " Out of bounds ";
+	default:
+		return "Set " + key + " error";
+	}
+}
+
+bool ConfigLoader::Load(const std::string& filePath) {
+	std::ifstream file(filePath);
+	if (!file.is_open()) {
+		return false;
+	}
+
+	GameSettings& settings = GameSettings::GetInstance();
+	const float previousMinSpeed = settings.minEnemySpeed;
+	const float previousMaxSpeed = settings.maxEnemySpeed;
+	std::string line;
+	while (std::getline(file, line)) {
+		line = Trim(line);
+		if (line.empty() || line[0] == '#') {
+			continue;
+		}
+
+		const size_t separator = line.find('=');
+		if (separator == std::string::npos) {
+			continue;
+		}
+
+		std::string key = Trim(line.substr(0, separator));
+		std::string value = Trim(line.substr(separator + 1));
+
+		ParseCode code = SetParameter(key, value);
+		if (code != ParseCode::no_err)
+			LOG(GetErrorString(code, key, value));
+	}
+
+	if (settings.minEnemySpeed > settings.maxEnemySpeed) {
+		settings.minEnemySpeed = previousMinSpeed;
+		settings.maxEnemySpeed = previousMaxSpeed;
+		return false;
+	}
+
+	return true;
+}
+
+
+=== config_loader.h ===
+#pragma once
+
+#include <algorithm>
+#include <cctype>
+#include <string>
+
+#include "game_settings.h"
+#include "log.h"
+
+enum ParseCode {
+	no_err = 0,
+	invalid_name = 2,
+	invalid_value = 3,
+	out_of_bounds = 4,
+};
+
+class ConfigLoader {
+	static std::string Trim(const std::string& value);
+	static ParseCode ParseFloat(const std::string& value, float& result, float min = 0.0f, float max = FLT_MAX);
+	static ParseCode ParseInt(const std::string& value, int& result, int min = 0, int max = INT_MAX);
+
+public:
+	static bool Load(const std::string& filePath);
+	static ParseCode SetParameter(std::string& key, std::string& value);
+	static std::string GetErrorString(ParseCode code, std::string& key, std::string& value);
+};
+
+inline void to_lower_case(std::string& string) {
+	std::transform(string.begin(), string.end(), string.begin(),
+		[](unsigned char character) {
+			return static_cast<char>(std::tolower(character));
+		});
+}
+
+
+=== console.cpp ===
+#include "console.h"
+
+#include "config_loader.h"
+#include "game_world.h"
+#include "map_save.h"
+
+#include <sstream>
+
+void Console::AddOutput(const std::string& text) {
+	output.push_back(text);
+	if (output.size() > 12) {
+		output.erase(output.begin());
+	}
+}
+
+void Console::ExecuteCommand(std::string& command) {
+	to_lower_case(command);
+	if (command.empty()) {
+		return;
+	}
+
+	std::istringstream stream(command);
+	std::string name;
+	stream >> name;
+
+
+	if (name == "help" || name == "h") {
+		AddOutput("help - help menu");
+		AddOutput("reload_config - load config from file");
+		AddOutput("frustum_update - flip frustum update");
+		AddOutput("load_map <filename> - load map");
+		AddOutput("save_map <filename> - save map");
+		AddOutput("spawn_interval <value> - change spawn interval");
+		AddOutput("min_enemy_speed <value> - change min enemy speed");
+		AddOutput("max_enemy_speed <value> - change max enemy speed");
+		AddOutput("max_enemies <value> - change max enemies");
+		AddOutput("spawn_radius <value> - change enemy spawn radius");
+		AddOutput("log_show_time <value> - change log show time");
+		AddOutput("max_fps <value> - change max fps");
+		return;
+	}
+	if (name == "reload_config") {
+		AddOutput(ConfigLoader::Load("config.txt")
+			? "Configuration reloaded"
+			: "Failed to reload configuration");
+		return;
+	}
+	if (name == "frustum_update") {
+		GameWorld::GetInstance().updateFrustum = !GameWorld::GetInstance().updateFrustum;
+		AddOutput(GameWorld::GetInstance().updateFrustum
+			? "frustum update on"
+			: "frustum update off");
+		return;
+	}
+	if (name == "load_map") {
+		std::string filename = "level";
+		stream >> filename;
+		AddOutput(MapSave::LoadFromFile(filename)
+			? "Map loaded from " + filename
+			: "Failed to load map from " + filename);
+		return;
+	}
+	if (name == "save_map") {
+		std::string filename = "level";
+		stream >> filename;
+		AddOutput(MapSave::SaveToFile(filename)
+			? "Map saved to " + filename
+			: "Failed to save map to " + filename);
+		return;
+	}
+
+	std::string value;
+	stream >> value;
+	ParseCode code = ConfigLoader::SetParameter(name, value);
+	if (code == ParseCode::no_err)
+		AddOutput(name + " changed successfully");
+	else
+		AddOutput(ConfigLoader::GetErrorString(code, name, value));
+}
+
+void Console::Update() {
+	if (IsKeyPressed(KEY_GRAVE)) {
+		open = !open;
+		if (!open) {
+			input.clear();
+		}
+		return;
+	}
+
+	if (!open) {
+		return;
+	}
+
+	if (IsKeyPressed(KEY_BACKSPACE) && !input.empty()) {
+		input.pop_back();
+	}
+
+	if (IsKeyPressed(KEY_ENTER)) {
+		AddOutput("> " + input);
+		ExecuteCommand(input);
+		input.clear();
+	}
+
+	int character = GetCharPressed();
+	while (character > 0) {
+		if (character >= 32 && character <= 126) {
+			input += static_cast<char>(character);
+		}
+		character = GetCharPressed();
+	}
+}
+
+void Console::Draw() {
+	if (!open) {
+		return;
+	}
+
+	const int fontSize = 18;
+	const int lineHeight = 22;
+	const int height = GetScreenHeight() / 2;
+
+	DrawRectangle(0, 0, GetScreenWidth(), height, { 0, 0, 0, 220 });
+
+	int y = 8;
+	for (const std::string& line : output) {
+		DrawText(line.c_str(), 8, y, fontSize, RAYWHITE);
+		y += lineHeight;
+	}
+
+	DrawLine(8, height - lineHeight - 8, GetScreenWidth() - 8,
+		height - lineHeight - 8, GRAY);
+	DrawText(("> " + input).c_str(), 8, height - lineHeight, fontSize, PINK);
+}
+
+bool Console::IsOpen() const {
+	return open;
+}
+
+
+=== console.h ===
+#pragma once
+
+#include <raylib.h>
+#include <string>
+#include <vector>
+
+class Console {
+private:
+	bool open = false;
+	std::string input;
+	std::vector<std::string> output;
+
+	void ExecuteCommand(std::string& command);
+	void AddOutput(const std::string& text);
+
+public:
+	void Update();
+	void Draw();
+	bool IsOpen() const;
+};
+
+
+=== dynamicBVH.cpp ===
+#include "dynamicBVH.h"
+#include <algorithm>
+
+float DynamicBVH::SurfaceArea(const BoundingBox& b) {
+    const float dx = b.max.x - b.min.x;
+    const float dy = b.max.y - b.min.y;
+    const float dz = b.max.z - b.min.z;
+    return 2.0f * (dx * dy + dy * dz + dz * dx);
+}
+
+bool DynamicBVH::Contains(const BoundingBox& outer, const BoundingBox& inner) {
+    return outer.min.x <= inner.min.x && outer.min.y <= inner.min.y && outer.min.z <= inner.min.z &&
+        outer.max.x >= inner.max.x && outer.max.y >= inner.max.y && outer.max.z >= inner.max.z;
+}
+
+BoundingBox DynamicBVH::CombineBoxes(const BoundingBox& a, const BoundingBox& b) {
+    return BoundingBox{
+        Vector3{ std::min(a.min.x, b.min.x), std::min(a.min.y, b.min.y), std::min(a.min.z, b.min.z) },
+        Vector3{ std::max(a.max.x, b.max.x), std::max(a.max.y, b.max.y), std::max(a.max.z, b.max.z) }
+    };
+}
+
+BoundingBox DynamicBVH::MakeFat(const BoundingBox& tight) {
+    const float k = FatMargin * 0.5f;
+    const Vector3 ext = Vector3Subtract(tight.max, tight.min);
+    const Vector3 m = {
+        std::max(ext.x * k, MinMargin),
+        std::max(ext.y * k, MinMargin),
+        std::max(ext.z * k, MinMargin)
+    };
+    return BoundingBox{ Vector3Subtract(tight.min, m), Vector3Add(tight.max, m) };
+}
+
+int DynamicBVH::AllocateNode() {
+    if (!freeNodes.empty()) {
+        const int index = freeNodes.back();
+        freeNodes.pop_back();
+        nodes[index] = DynamicBVHNode{};
+        return index;
+    }
+    nodes.emplace_back();
+    return static_cast<int>(nodes.size()) - 1;
+}
+
+void DynamicBVH::FreeNode(int index) {
+    nodes[index] = DynamicBVHNode{};
+    freeNodes.push_back(index);
+}
+
+void DynamicBVH::AddObject(PhysicsObject* object) {
+    if (!object || leaves.find(object) != leaves.end())
+        return;
+
+    objects.push_back(object);
+
+    const int leaf = AllocateNode();
+    nodes[leaf].object = object;
+    nodes[leaf].bounds = MakeFat(object->GetBounds());
+    leaves[object] = leaf;
+
+    InsertLeaf(leaf);
+}
+
+void DynamicBVH::RemoveObject(PhysicsObject* object) {
+    const auto it = leaves.find(object);
+    if (it == leaves.end())
+        return;
+
+    const int leaf = it->second;
+    RemoveLeaf(leaf);
+    FreeNode(leaf);
+    leaves.erase(it);
+
+    const auto objIt = std::find(objects.begin(), objects.end(), object);
+    if (objIt != objects.end()) {
+        *objIt = objects.back();
+        objects.pop_back();
+    }
+}
+
+const std::vector<PhysicsObject*>& DynamicBVH::GetObjects() const {
+    return objects;
+}
+
+void DynamicBVH::Clear() {
+    objects.clear();
+    leaves.clear();
+    nodes.clear();
+    freeNodes.clear();
+    root = BVH_NULL_NODE;
+}
+
+void DynamicBVH::Update() {
+    for (PhysicsObject* object : objects) {
+        const int leaf = leaves[object];
+        const BoundingBox tight = object->GetBounds();
+
+        if (Contains(nodes[leaf].bounds, tight))
+            continue;
+
+        RemoveLeaf(leaf);
+        nodes[leaf].bounds = MakeFat(tight);
+        InsertLeaf(leaf);
+    }
+}
+
+void DynamicBVH::InsertLeaf(int leaf) {
+    if (root == BVH_NULL_NODE) {
+        root = leaf;
+        nodes[root].parent = BVH_NULL_NODE;
+        return;
+    }
+
+    const BoundingBox leafBox = nodes[leaf].bounds;
+    int index = root;
+    while (!nodes[index].IsLeaf()) {
+        const int child1 = nodes[index].left;
+        const int child2 = nodes[index].right;
+
+        const float area = SurfaceArea(nodes[index].bounds);
+        const float combinedArea = SurfaceArea(CombineBoxes(nodes[index].bounds, leafBox));
+
+        const float cost = 2.0f * combinedArea;
+        const float inheritanceCost = 2.0f * (combinedArea - area);
+
+        auto childCost = [&](int child) {
+            const float merged = SurfaceArea(CombineBoxes(leafBox, nodes[child].bounds));
+            if (nodes[child].IsLeaf())
+                return merged + inheritanceCost;
+            return merged - SurfaceArea(nodes[child].bounds) + inheritanceCost;
+            };
+
+        const float cost1 = childCost(child1);
+        const float cost2 = childCost(child2);
+
+        if (cost < cost1 && cost < cost2)
+            break;
+
+        index = (cost1 < cost2) ? child1 : child2;
+    }
+
+    const int sibling = index;
+    const int oldParent = nodes[sibling].parent;
+    const int newParent = AllocateNode();
+
+    nodes[newParent].parent = oldParent;
+    nodes[newParent].bounds = CombineBoxes(leafBox, nodes[sibling].bounds);
+    nodes[newParent].height = nodes[sibling].height + 1;
+    nodes[newParent].left = sibling;
+    nodes[newParent].right = leaf;
+
+    if (oldParent != BVH_NULL_NODE) {
+        if (nodes[oldParent].left == sibling)
+            nodes[oldParent].left = newParent;
+        else
+            nodes[oldParent].right = newParent;
+    }
+    else {
+        root = newParent;
+    }
+
+    nodes[sibling].parent = newParent;
+    nodes[leaf].parent = newParent;
+
+    RefitUpwards(newParent);
+}
+
+void DynamicBVH::RemoveLeaf(int leaf) {
+    if (leaf == root) {
+        root = BVH_NULL_NODE;
+        return;
+    }
+
+    const int parent = nodes[leaf].parent;
+    const int grandParent = nodes[parent].parent;
+    const int sibling = (nodes[parent].left == leaf) ? nodes[parent].right : nodes[parent].left;
+
+    if (grandParent != BVH_NULL_NODE) {
+        if (nodes[grandParent].left == parent)
+            nodes[grandParent].left = sibling;
+        else
+            nodes[grandParent].right = sibling;
+
+        nodes[sibling].parent = grandParent;
+        FreeNode(parent);
+        RefitUpwards(grandParent);
+    }
+    else {
+        root = sibling;
+        nodes[sibling].parent = BVH_NULL_NODE;
+        FreeNode(parent);
+    }
+
+    nodes[leaf].parent = BVH_NULL_NODE;
+}
+
+void DynamicBVH::RefitUpwards(int index) {
+    while (index != BVH_NULL_NODE) {
+        index = Balance(index);
+
+        const int l = nodes[index].left;
+        const int r = nodes[index].right;
+        nodes[index].height = 1 + std::max(nodes[l].height, nodes[r].height);
+        nodes[index].bounds = CombineBoxes(nodes[l].bounds, nodes[r].bounds);
+
+        index = nodes[index].parent;
+    }
+}
+
+int DynamicBVH::Balance(int iA) {
+    DynamicBVHNode& A = nodes[iA];
+    if (A.IsLeaf() || A.height < 2)
+        return iA;
+
+    const int iB = A.left;
+    const int iC = A.right;
+    DynamicBVHNode& B = nodes[iB];
+    DynamicBVHNode& C = nodes[iC];
+
+    const int balance = C.height - B.height;
+
+    if (balance > 1) {
+        const int iF = C.left;
+        const int iG = C.right;
+        DynamicBVHNode& F = nodes[iF];
+        DynamicBVHNode& G = nodes[iG];
+
+        C.left = iA;
+        C.parent = A.parent;
+        A.parent = iC;
+
+        if (C.parent != BVH_NULL_NODE) {
+            if (nodes[C.parent].left == iA) nodes[C.parent].left = iC;
+            else                            nodes[C.parent].right = iC;
+        }
+        else {
+            root = iC;
+        }
+
+        if (F.height > G.height) {
+            C.right = iF;
+            A.right = iG;
+            G.parent = iA;
+            A.bounds = CombineBoxes(B.bounds, G.bounds);
+            C.bounds = CombineBoxes(A.bounds, F.bounds);
+            A.height = 1 + std::max(B.height, G.height);
+            C.height = 1 + std::max(A.height, F.height);
+        }
+        else {
+            C.right = iG;
+            A.right = iF;
+            F.parent = iA;
+            A.bounds = CombineBoxes(B.bounds, F.bounds);
+            C.bounds = CombineBoxes(A.bounds, G.bounds);
+            A.height = 1 + std::max(B.height, F.height);
+            C.height = 1 + std::max(A.height, G.height);
+        }
+        return iC;
+    }
+
+    if (balance < -1) {
+        const int iD = B.left;
+        const int iE = B.right;
+        DynamicBVHNode& D = nodes[iD];
+        DynamicBVHNode& E = nodes[iE];
+
+        B.left = iA;
+        B.parent = A.parent;
+        A.parent = iB;
+
+        if (B.parent != BVH_NULL_NODE) {
+            if (nodes[B.parent].left == iA) nodes[B.parent].left = iB;
+            else                            nodes[B.parent].right = iB;
+        }
+        else {
+            root = iB;
+        }
+
+        if (D.height > E.height) {
+            B.right = iD;
+            A.left = iE;
+            E.parent = iA;
+            A.bounds = CombineBoxes(C.bounds, E.bounds);
+            B.bounds = CombineBoxes(A.bounds, D.bounds);
+            A.height = 1 + std::max(C.height, E.height);
+            B.height = 1 + std::max(A.height, D.height);
+        }
+        else {
+            B.right = iE;
+            A.left = iD;
+            D.parent = iA;
+            A.bounds = CombineBoxes(C.bounds, D.bounds);
+            B.bounds = CombineBoxes(A.bounds, E.bounds);
+            A.height = 1 + std::max(C.height, D.height);
+            B.height = 1 + std::max(A.height, E.height);
+        }
+        return iB;
+    }
+
+    return iA;
+}
+
+std::vector<PhysicsObject*> DynamicBVH::CheckIntersection(const BoundingBox& bounds) const {
+    std::vector<PhysicsObject*> hits;
+    if (root == BVH_NULL_NODE)
+        return hits;
+
+    std::vector<int> stack;
+    stack.reserve(64);
+    stack.push_back(root);
+
+    while (!stack.empty()) {
+        const int index = stack.back();
+        stack.pop_back();
+
+        const DynamicBVHNode& node = nodes[index];
+        if (!CheckCollisionBoxes(node.bounds, bounds))
+            continue;
+
+        if (node.IsLeaf()) {
+            if (CheckCollisionBoxes(node.object->GetBounds(), bounds))
+                hits.push_back(node.object);
+        }
+        else {
+            stack.push_back(node.left);
+            stack.push_back(node.right);
+        }
+    }
+    return hits;
+}
+
+void DynamicBVH::Draw() const {
+    if (root == BVH_NULL_NODE)
+        return;
+
+    struct StackItem { int node; int depth; };
+    std::vector<StackItem> stack;
+    stack.reserve(64);
+    stack.push_back({ root, 0 });
+
+    while (!stack.empty()) {
+        const StackItem current = stack.back();
+        stack.pop_back();
+
+        const DynamicBVHNode& node = nodes[current.node];
+        const unsigned char brightness =
+            (unsigned char)std::max(40, 255 - (current.depth * 25));
+
+        const Color boxColor = node.IsLeaf()
+            ? Color{ brightness, 0, 0, 255 }
+        : Color{ 0, brightness, 0, 255 };
+
+        DrawBoundingBox(node.bounds, boxColor);
+
+        if (!node.IsLeaf()) {
+            stack.push_back({ node.right, current.depth + 1 });
+            stack.push_back({ node.left, current.depth + 1 });
+        }
+    }
+}
+
+
+=== dynamicBVH.h ===
+#pragma once
+
+#include <raylib.h>
+#include <vector>
+#include <unordered_map>
+#include "physics_object.h"
+
+constexpr int BVH_NULL_NODE = -1;
+
+struct DynamicBVHNode {
+    BoundingBox bounds = {};
+    int parent = BVH_NULL_NODE;
+    int left = BVH_NULL_NODE;
+    int right = BVH_NULL_NODE;
+    int height = 0;
+    PhysicsObject* object = nullptr;
+
+    bool IsLeaf() const { return left == BVH_NULL_NODE; }
+};
+
+class DynamicBVH {
+public:
+    static constexpr float FatMargin = 0.15f;
+    static constexpr float MinMargin = 0.05f;
+
+    void Update();
+
+    void AddObject(PhysicsObject* object);
+    void RemoveObject(PhysicsObject* object);
+    const std::vector<PhysicsObject*>& GetObjects() const;
+
+    std::vector<PhysicsObject*> CheckIntersection(const BoundingBox& bounds) const;
+
+    void Clear();
+    void Draw() const;
+
+private:
+    std::vector<DynamicBVHNode> nodes;
+    std::vector<int> freeNodes;
+    int root = BVH_NULL_NODE;
+
+    std::vector<PhysicsObject*> objects;
+    std::unordered_map<PhysicsObject*, int> leaves;
+
+    int AllocateNode();
+    void FreeNode(int index);
+    void InsertLeaf(int leaf);
+    void RemoveLeaf(int leaf);
+    int Balance(int index);
+    void RefitUpwards(int index);
+
+    static BoundingBox CombineBoxes(const BoundingBox& a, const BoundingBox& b);
+    static BoundingBox MakeFat(const BoundingBox& tight);
+
+    static float SurfaceArea(const BoundingBox& b);
+    static bool Contains(const BoundingBox& outer, const BoundingBox& inner);
+};
+
+
+=== dynamic_sphere.h ===
+#pragma once
+
+#include "game_object.h"
+#include "physics_object.h"
+
+class DynamicSphere : public DrawableObject, public PhysicsObject {
+public:
+	DynamicSphere(Vector3 position, float radius = 0.5f, float mass = 5.0f)
+		: PhysicsObject(ObjectType::_dynamic, new SphereCollider(radius, mass), 0.95f) {
+		this->position = position;
+		if (texture == nullptr)
+			texture = std::make_unique<Texture2D>(LoadTexture("resources/bowling.png"));
+		if (model == nullptr) {
+			model = std::make_unique<Model>(LoadModel("resources/bowling_ball.obj"));
+			model->materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = *texture;
+		}
+	}
+
+	void Draw() const override {
+		Matrix rotationMatrix = QuaternionToMatrix(rotation);
+		model->transform = rotationMatrix;
+		DrawModel(*model, position, dynamic_cast<SphereCollider*>(properties.collider)->radius, WHITE);
+	}
+
+private:
+	inline static std::unique_ptr<Model> model;
+	inline static std::unique_ptr<Texture2D> texture;
+};
+
+
+=== editor.cpp ===
+#include "editor.h"
+#include "camera_marker.h"
+#include "dynamic_sphere.h"
+#include "game_world.h"
+#include "skittle.h"
+#include <cmath>
+
+Editor::Editor() {
+	SelectObject(selectedIndex);
+}
+
+Editor::~Editor() {
+	delete currentObject;
+}
+
+void Editor::Update(Camera3D camera, float deltaTime) {
+	Vector2 screenSize = {
+		GetScreenWidth(),
+		GetScreenHeight()
+	};
+	Vector2 halfSize = screenSize / 2;
+	Ray cameraRay = GetScreenToWorldRay(halfSize, camera);
+
+	if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+		RayCollision collision{};
+		collision.distance = FLT_MAX;
+		collision.hit = false;
+
+		RayCollision newCollision;
+		GameObject* selectedObject = nullptr;
+
+		for (GameObject* object : GameWorld::GetInstance().GetObjects()) {
+			if (object->active) {
+				if (DrawableObject* drawObj = dynamic_cast<DrawableObject*>(object)) {
+					newCollision = GetRayCollisionBox(cameraRay, drawObj->GetBounds());
+					if (newCollision.hit && newCollision.distance < collision.distance) {
+						collision = newCollision;
+						selectedObject = object;
+					}
+				}
+			}
+		}
+
+		if (collision.hit && collision.distance < 100.0f) {
+			GameWorld::GetInstance().RemoveObject(selectedObject);
+		}
+	}
+
+	if (IsKeyPressed(KEY_ONE)) {
+		selectedIndex = selectedIndex == 1 ? 0 : 1;
+	}
+	if (IsKeyPressed(KEY_TWO)) {
+		selectedIndex = selectedIndex == 2 ? 0 : 2;
+	}
+	if (IsKeyPressed(KEY_THREE)) {
+		selectedIndex = selectedIndex == 3 ? 0 : 3;
+	}
+	if (IsKeyPressed(KEY_FOUR)) {
+		selectedIndex = selectedIndex == 4 ? 0 : 4;
+	}
+	if (IsKeyPressed(KEY_FIVE)) {
+		selectedIndex = selectedIndex == 5 ? 0 : 5;
+	}
+	if (IsKeyPressed(KEY_SIX)) {
+		selectedIndex = selectedIndex == 6 ? 0 : 6;
+	}
+
+	SelectObject(selectedIndex);
+	if (currentObject == nullptr)
+		return;
+
+	Vector3 hitPosition;
+	if (GetObjectPosition(cameraRay, hitPosition)) {
+		currentObject->active = true;
+		currentObject->position = hitPosition;
+	}
+	else {
+		currentObject->active = false;
+	}
+
+	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && currentObject->active) {
+		GameWorld::GetInstance().AddObject(currentObject);
+		currentObject = nullptr;
+	}
+}
+
+void Editor::Draw(Camera3D camera) {
+
+	BeginMode3D(camera);
+
+	DrawLine3D({ -1000.0f, 0.0f, 0.0f }, { 1000.0f, 0.0f, 0.0f }, RED);
+	DrawLine3D({ 0.0f, -1000.0f, 0.0f }, { 0.0f, 1000.0f, 0.0f }, GREEN);
+	DrawLine3D({ 0.0f, 0.0f, -1000.0f }, { 0.0f, 0.0f, 1000.0f }, BLUE);
+
+	if(currentObject != nullptr && currentObject->active)
+		if (DrawableObject* currentDrawObj = dynamic_cast<DrawableObject*>(currentObject))
+			currentDrawObj->Draw();
+
+	EndMode3D();
+
+	Vector2 screenSize = {
+		GetScreenWidth(),
+		GetScreenHeight()
+	};
+	Vector2 halfSize = screenSize / 2;
+
+	DrawLine(halfSize.x - 10.0f, halfSize.y, halfSize.x + 10.0f, halfSize.y, GRAY);
+	DrawLine(halfSize.x, halfSize.y - 10.0f, halfSize.x, halfSize.y + 10.0f, GRAY);
+}
+
+bool Editor::GetObjectPosition(Ray cameraRay, Vector3& output) {
+	
+	RayCollision collision{};
+	collision.distance = FLT_MAX;
+	collision.hit = false;
+
+	DrawableObject* hitObject = nullptr;
+	GameWorld::GetInstance().Raycast(cameraRay, collision, hitObject);
+
+	if (!collision.hit || hitObject == nullptr) {
+		collision = GetRayCollisionQuad(
+			cameraRay,
+			{ -1000.0f, 0.0f,  1000.0f },
+			{ 1000.0f, 0.0f, 1000.0f },
+			{ 1000.0f, 0.0f, -1000.0f },
+			{ -1000.0f, 0.0f, -1000.0f }
+		);
+	}
+
+	if (collision.hit && collision.distance < 100.0f) {
+		output = collision.point;
+
+		if (DrawableObject* drawObj = dynamic_cast<DrawableObject*>(currentObject)) {
+			Vector3 size = drawObj->GetBounds().max - drawObj->GetBounds().min;
+			Vector3 halfSize = size * 0.5f;
+
+			float offset = std::fabs(collision.normal.x) * halfSize.x
+				+ std::fabs(collision.normal.y) * halfSize.y
+				+ std::fabs(collision.normal.z) * halfSize.z;
+
+			output += collision.normal * (offset + 0.0001f);
+			output = SnapToGrid(output, size);
+		}
+		return true;
+	}
+	return false;
+}
+
+void Editor::SelectObject(int index) {
+	if (currentObject != nullptr)
+		delete currentObject;
+	switch (index) {
+	case 1:
+		currentObject = new StaticCube({ 0.0f,0.0f,0.0f }, { 1.0f,1.0f,1.0f });
+		break;
+	case 2:
+		currentObject = new StaticCube({ 0.0f,0.0f,0.0f }, { 10.0f,1.0f,10.0f });
+		break;
+	case 3:
+		currentObject = new Target({ 0.0f,0.0f,0.0f }, false);
+		break;
+	case 4:
+		currentObject = new CameraMarker({ 0.0f, 0.0f, 0.0f });
+		break;
+	case 5:
+		currentObject = new DynamicSphere({ 0.0f, 0.0f, 0.0f });
+		break;
+	case 6:
+		currentObject = new Skittle({ 0.0f, 0.0f, 0.0f });
+		break;
+	default:
+		currentObject = nullptr;
+		break;
+	}
+}
+
+Vector3 Editor::SnapToGrid(Vector3 position, Vector3 size) {
+	return {
+		std::fmod(size.x, 2.0f) == 0.0f ? std::floor(position.x + 0.5f) : std::floor(position.x) + 0.5f,
+		std::fmod(size.y, 2.0f) == 0.0f ? std::floor(position.y + 0.5f) : std::floor(position.y) + 0.5f,
+		std::fmod(size.z, 2.0f) == 0.0f ? std::floor(position.z + 0.5f) : std::floor(position.z) + 0.5f
+	};
+}
+
+
+=== editor.h ===
+#pragma once
+
+#include "game_world.h"
+#include "game_object.h"
+
+class Editor {
+public:
+	Editor();
+	~Editor();
+
+	void Update(Camera3D camera, float deltaTime);
+	void Draw(Camera3D camera);
+
+private:
+	GameObject* currentObject = nullptr;
+
+	int selectedIndex = 1;
+
+	bool GetObjectPosition(Ray cameraRay, Vector3& output);
+	void SelectObject(int obj);
+	Vector3 SnapToGrid(Vector3 position, Vector3 size);
+};
+
+
+=== editor_camera.cpp ===
+#include "editor_camera.h"
+
+void EditorCamera::Move(Vector3 transform) {
+	camera.position += transform;
+	camera.target = camera.position + direction;
+}
+
+void EditorCamera::Reset() {
+	camera.position = startPosition;
+	yaw = -90.0f;
+	pitch = -35.0f;
+	direction = {
+		cosf(yaw * DEG2RAD) * cosf(pitch * DEG2RAD),
+		sinf(pitch * DEG2RAD),
+		sinf(yaw * DEG2RAD) * cosf(pitch * DEG2RAD)
+	};
+	direction = Vector3Normalize(direction);
+	camera.target = camera.position + direction;
+}
+
+EditorCamera::EditorCamera() {
+	startPosition = { -51.0f, 60.0f, 0.0f };
+	speed = 40.0f;
+	mouseSensitivity = 0.08f;
+
+	camera.up = { 0.0f, 1.0f, 0.0f };
+	camera.fovy = 60.0f;
+	camera.projection = CAMERA_PERSPECTIVE;
+	Reset();
+}
+
+Camera3D EditorCamera::GetCamera() const {
+	return camera;
+}
+
+void EditorCamera::SetFromCamera(Camera3D source) {
+	camera = source;
+	direction = Vector3Normalize(camera.target - camera.position);
+
+	yaw = atan2f(direction.z, direction.x) / DEG2RAD;
+	pitch = asinf(Clamp(direction.y, -1.0f, 1.0f)) / DEG2RAD;
+	pitch = Clamp(pitch, -MaxPitch, MaxPitch);
+}
+
+void EditorCamera::Update(float deltaTime) {
+	Vector2 mouseDelta = GetMouseDelta();
+	yaw += mouseDelta.x * mouseSensitivity;
+	pitch -= mouseDelta.y * mouseSensitivity;
+	pitch = Clamp(pitch, -MaxPitch, MaxPitch);
+
+	direction = {
+		cosf(yaw * DEG2RAD) * cosf(pitch * DEG2RAD),
+		sinf(pitch * DEG2RAD),
+		sinf(yaw * DEG2RAD) * cosf(pitch * DEG2RAD)
+	};
+	direction = Vector3Normalize(direction);
+
+	const Vector3 right = Vector3Normalize(Vector3CrossProduct(direction, camera.up));
+	const Vector3 viewUp = Vector3Normalize(Vector3CrossProduct(right, direction));
+	Vector3 moveDirection = Vector3Zero();
+
+	if (IsKeyDown(KEY_W)) moveDirection += direction;
+	if (IsKeyDown(KEY_S)) moveDirection -= direction;
+	if (IsKeyDown(KEY_D)) moveDirection += right;
+	if (IsKeyDown(KEY_A)) moveDirection -= right;
+	if (IsKeyDown(KEY_SPACE)) moveDirection += viewUp;
+	if (IsKeyDown(KEY_LEFT_CONTROL)) moveDirection -= viewUp;
+
+	if (Vector3LengthSqr(moveDirection) > 0.0f) {
+		moveDirection = Vector3Normalize(moveDirection);
+		Move(moveDirection * speed * deltaTime);
+	}
+	else {
+		camera.target = camera.position + direction;
+	}
+}
+
+
+
+=== editor_camera.h ===
+#pragma once
+
+#include <raylib.h>
+#include <raymath.h>
+
+class EditorCamera {
+private:
+	Camera3D camera;
+
+	Vector3 startPosition;
+	Vector3 direction;
+	
+	float yaw;
+	float pitch;
+	const float MaxPitch = 89.0f;
+
+	float speed;
+	float mouseSensitivity;
+
+	void Move(Vector3 direction);
+	void Reset();
+public:
+
+	EditorCamera();
+	Camera3D GetCamera() const;
+	void SetFromCamera(Camera3D source);
+	void Update(float deltaTime);
+};
+
+
+=== enemy.cpp ===
+#include "enemy.h"
+
+#include "enemy_spawner.h"
+#include "game_world.h"
+
+std::unique_ptr<Model> Enemy::model;
+std::unique_ptr<Texture2D> Enemy::texture;
+
+Enemy::Enemy(Vector3 position)
+    : PhysicsObject(ObjectType::_kinematic, new BoxCollider(), 0.45f) {
+    const GameSettings& settings = GameSettings::GetInstance();
+    this->position = position;
+    EnemySpawner::enemyCount++;
+
+    if (texture == nullptr)
+        texture = std::make_unique<Texture2D>(LoadTexture("resources/model_texture.png"));
+    if (model == nullptr) {
+        model = std::make_unique<Model>(LoadModel("resources/enemy.obj"));
+        model->materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = *texture;
+    }
+
+    color = RED;
+    attackDistance = 1.0f;
+    speed = static_cast<float>(GetRandomValue(
+        static_cast<int>(settings.minEnemySpeed * 10000.0f),
+        static_cast<int>(settings.maxEnemySpeed * 10000.0f))) / 10000.0f;
+}
+
+Enemy::~Enemy() {
+    EnemySpawner::enemyCount--;
+}
+
+
+void Enemy::Update(float deltaTime) {
+    Target* targetObject = Target::GetCurrentTarget();
+    if (targetObject == nullptr) {
+        properties.velocity = {};
+        return;
+    }
+
+    Vector3 targetPosition = targetObject->position;
+    Vector3 direction = targetPosition - position;
+    direction.y = 0;
+    direction = Vector3Normalize(direction);
+
+    properties.velocity = direction * speed;
+    GameWorld::GetInstance().MoveObject(this, properties.velocity * deltaTime);
+
+    Vector3 target = targetPosition;
+    target.y = position.y;
+
+    if (Vector3Distance(position, target) <= attackDistance) {
+        GameWorld::GetInstance().RemoveObject(this);
+        return;
+    }
+}
+
+void Enemy::Draw() const {
+    DrawModel(*model, position, 0.33f, WHITE);
+}
+
+BoundingBox Enemy::GetBounds() const {
+    return {
+        position - Vector3{ 0.5f, 0.5f, 0.5f },
+        position + Vector3{ 0.5f, 0.5f, 0.5f }
+    };
+}
+
+
+=== enemy.h ===
+#pragma once
+
+#include <raylib.h>
+#include <raymath.h>
+#include <memory>
+
+#include "game_settings.h"
+#include "game_object.h"
+#include "physics_object.h"
+
+class Enemy : public DrawableObject, public UpdatableObject, public PhysicsObject {
+public:
+	Enemy(Vector3 position);
+	~Enemy();
+
+	void Update(float deltaTime) override;
+	void Draw() const override;
+	BoundingBox GetBounds() const override;
+
+private:
+	Color color;
+	float speed;
+
+	float attackDistance;
+
+	static std::unique_ptr<Model> model;
+	static std::unique_ptr<Texture2D> texture;
+
+	void Move(Vector3 transform);
+};
+
+
+=== enemy_spawner.cpp ===
+#include "enemy_spawner.h"
+
+#include "game_world.h"
+
+int EnemySpawner::enemyCount = 0;
+
+EnemySpawner::EnemySpawner() = default;
+
+void EnemySpawner::Update(float deltaTime) {
+	spawnTimer += deltaTime;
+
+	const GameSettings& settings = GameSettings::GetInstance();
+	if (spawnTimer < settings.spawnInterval || enemyCount >= settings.maxEnemies) {
+		return;
+	}
+
+	spawnTimer = 0.0f;
+	Target* target = Target::GetCurrentTarget();
+	if (target == nullptr) {
+		return;
+	}
+
+	float angle = GetRandomValue(0, 360) * DEG2RAD;
+	Vector3 spawnPosition = {
+		target->position.x + cos(angle) * settings.spawnRadius,
+		target->position.y,
+		target->position.z + sin(angle) * settings.spawnRadius
+	};
+
+	GameWorld::GetInstance().AddObject(new Enemy(spawnPosition));
+}
+
+
+=== enemy_spawner.h ===
+#pragma once
+#include "game_object.h"
+
+#include "game_settings.h"
+#include "enemy.h"
+#include "log.h"
+#include "target.h"
+
+class EnemySpawner : public UpdatableObject {
+public:
+	EnemySpawner();
+	void Update(float deltaTime) override;
+
+	static int enemyCount;
+private:
+	float spawnTimer = 0.0f;
+};
+
+
+=== frustum.cpp ===
+#include "frustum.h"
+
+#include <cmath>
+
+#include "raymath.h"
+
+void Frustum::UpdateFrustum(Camera3D camera) {
+	const float aspect = static_cast<float>(GetScreenWidth()) /
+		static_cast<float>(GetScreenHeight());
+	const float verticalScale = tanf(camera.fovy * DEG2RAD * 0.5f);
+	const float horizontalScale = verticalScale * aspect;
+
+	const Vector3 forward = Vector3Normalize(camera.target - camera.position);
+	const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera.up));
+	const Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
+
+	const auto makePlane = [](Vector3 normal, Vector3 point) {
+		return Plane{ normal, -Vector3DotProduct(normal, point) };
+	};
+
+	planes[0] = makePlane(forward, camera.position + forward * NearPlane);
+	planes[1] = makePlane(forward * -1.0f, camera.position + forward * FarPlane);
+	planes[2] = makePlane(right + forward * horizontalScale, camera.position);
+	planes[3] = makePlane(right * -1.0f + forward * horizontalScale, camera.position);
+	planes[4] = makePlane(up + forward * verticalScale, camera.position);
+	planes[5] = makePlane(up * -1.0f + forward * verticalScale, camera.position);
+}
+
+bool Frustum::IsVisible(const BoundingBox& bounds) const {
+	const Vector3 center = (bounds.min + bounds.max) * 0.5f;
+	const Vector3 extents = (bounds.max - bounds.min) * 0.5f;
+
+	for (const Plane& plane : planes) {
+		const float distance = Vector3DotProduct(plane.normal, center) + plane.distance;
+		const float radius = fabsf(plane.normal.x) * extents.x +
+			fabsf(plane.normal.y) * extents.y +
+			fabsf(plane.normal.z) * extents.z;
+
+		if (distance + radius < 0.0f) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+=== frustum.h ===
+#pragma once
+
+#include "raylib.h"
+#include "scope_marker.h"
+
+class Frustum {
+public:
+	void UpdateFrustum(Camera3D camera);
+
+	bool IsVisible(const BoundingBox& bounds) const;
+
+private:
+	struct Plane {
+		Vector3 normal;
+		float distance;
+	};
+
+	Plane planes[6];
+
+	float NearPlane = 0.1f;
+	float FarPlane = 1000.0f;
+};
+
+
+=== game_object.h ===
+#pragma once
+
+#include <raylib.h>
+#include <raymath.h>
+#include <string>
+
+class GameObject {
+public:
+    bool active = true;
+    Vector3 position = { 0.0f, 0.0f, 0.0f };
+    Quaternion rotation = QuaternionIdentity();
+
+    virtual ~GameObject() = default;
+    virtual BoundingBox GetBounds() const {
+        return { position, position };
+    }
+};
+
+class DrawableObject : public virtual GameObject {
+public:
+    virtual ~DrawableObject() = default;
+
+    virtual void Draw() const = 0;
+};
+
+class UpdatableObject : public virtual GameObject {
+public:
+    virtual ~UpdatableObject() = default;
+
+    virtual void Update(float deltaTime) = 0;
+};
+
+
+=== game_settings.h ===
+#pragma once
+
+struct GameSettings {
+	static GameSettings& GetInstance() {
+		static GameSettings instance;
+		return instance;
+	}
+
+	GameSettings(const GameSettings&) = delete;
+	GameSettings& operator=(const GameSettings&) = delete;
+
+	float spawnInterval = 1.5f;
+	float spawnRadius = 40.0f;
+	float minEnemySpeed = 5.0f;
+	float maxEnemySpeed = 15.0f;
+	int maxEnemies = 10;
+	int maxFps = 60;
+	float logShowTime = 5.0f;
+
+private:
+	GameSettings() = default;
+};
+
+
+=== game_world.cpp ===
+#include "game_world.h"
+#include "enemy_spawner.h"
+#include "camera_marker.h"
+#include <unordered_set>
+
+GameWorld::GameWorld() = default;
+
+void GameWorld::InitWorld() {
+    drawableObjects.GenerateGrid(Vector3(-50.f, -10.f, -50.f), CellCoord(10, 5, 10), Vector3(10.f, 5.f, 10.f));
+    AddObject(new EnemySpawner());
+}
+
+void GameWorld::ClearWorld() {
+    for (GameObject* object : objects) {
+        if (auto* physical = dynamic_cast<PhysicsObject*>(object)) {
+            physicsWorld.RemoveObject(physical);
+        }
+        delete object;
+    }
+
+    objects.clear();
+    drawableObjects.Clear();
+    updatableObjects.clear();
+    target = nullptr;
+
+    InitWorld();
+}
+
+void GameWorld::DrawWorld(Camera3D camera, bool showEditorObjects) {
+    SCOPE_MARKER(Draw, Render);
+    
+    visibleObjects = 0;
+
+    BeginMode3D(camera);
+
+    if(updateFrustum)
+        frustum.UpdateFrustum(camera);
+
+    std::unordered_set<DrawableObject*> renderedObjects;
+    auto& cells = drawableObjects.GetCells();
+    for (int i = 0; i < cells.size(); i++) {
+        auto& cell = cells[i];
+        if (!cell.objects.empty() && (i == 0 || frustum.IsVisible(cell.bounds))) {
+            if (showEditorObjects)
+                DrawCubeWiresV((cell.bounds.max + cell.bounds.min) * 0.5f, cell.bounds.max - cell.bounds.min, GRAY);
+            for (DrawableObject* object : cell.objects) {
+                if (!showEditorObjects && dynamic_cast<CameraMarker*>(object) != nullptr) {
+                    continue;
+                }
+                if (object != nullptr && object->active && !renderedObjects.contains(object) && (i != 0 || frustum.IsVisible(object->GetBounds()))) {
+                    renderedObjects.insert(object);
+                    object->Draw();
+                    visibleObjects++;
+                }
+            }
+        }
+    }
+    invisibleObjects = drawableObjects.getTotalObjects() - visibleObjects;
+
+    EndMode3D();
+
+    DrawText(("Visible objects: " + std::to_string(visibleObjects)).c_str(), 
+        5, 5, 18, BLACK);
+    DrawText(("Invisible objects: " + std::to_string(invisibleObjects)).c_str(),
+        200, 5, 18, BLACK);
+}
+
+void GameWorld::UpdateWorld(float deltaTime) {
+    SCOPE_MARKER(Update, Update);
+
+    const std::vector<UpdatableObject*> updateList = updatableObjects;
+    for (auto object : updateList) {
+        if (object != nullptr && object->active) {
+            object->Update(deltaTime);
+        }
+    }
+
+    physicsWorld.Update(deltaTime);
+}
+
+void GameWorld::AddObject(GameObject* object) {
+    if (object == nullptr) {
+        return;
+    }
+
+    objects.push_back(object);
+
+    if (auto* drawable = dynamic_cast<DrawableObject*>(object)) {
+        drawableObjects.AddObject(drawable);
+    }
+
+    if (auto* updatable = dynamic_cast<UpdatableObject*>(object)) {
+        updatableObjects.push_back(updatable);
+    }
+
+    if (auto* physical = dynamic_cast<PhysicsObject*>(object)) {
+        physicsWorld.AddObject(physical);
+    }
+}
+
+void GameWorld::AddSceneObjects(std::vector<GameObject*>& objects) {
+    BoundingBox bounds = drawableObjects.CalculateBoundingBox(objects);
+    drawableObjects.GenerateGrid(bounds, { 10.f,10.f,10.f });
+    for (auto object : objects) {
+        AddObject(object);
+    }
+}
+
+void GameWorld::RemoveObject(GameObject* object) {
+    if (object == nullptr) {
+        return;
+    }
+
+    if (auto* drawable = dynamic_cast<DrawableObject*>(object)) {
+        drawableObjects.RemoveObject(drawable);
+    }
+
+    if (auto* updatable = dynamic_cast<UpdatableObject*>(object)) {
+        for (int i = 0; i < updatableObjects.size(); i++) {
+            if (updatableObjects[i] == updatable) {
+                updatableObjects[i] = updatableObjects.back();
+                updatableObjects.pop_back();
+                break;
+            }
+        }
+    }
+
+    if (auto* physical = dynamic_cast<PhysicsObject*>(object)) {
+        physicsWorld.RemoveObject(physical);
+    }
+
+    for (int i = 0; i < objects.size(); i++) {
+        if (objects[i] == object) {
+            objects[i] = objects.back();
+            objects.pop_back();
+            break;
+        }
+    }
+
+    delete object;
+}
+
+std::vector<GameObject*>& const GameWorld::GetObjects()
+{
+    return objects;
+}
+
+void GameWorld::Raycast(Ray ray, RayCollision& output, DrawableObject*& object) {
+    SCOPE_MARKER(Raycast, Update);
+    output.hit = false;
+    output.distance = INFINITY;
+    object = nullptr;
+
+    std::unordered_set<DrawableObject*> renderedObjects;
+
+    RayCollision newCollision{};
+    bool cellHit;
+    auto& cells = drawableObjects.GetCells();
+    for (int i = 0; i < cells.size(); i++) {
+        auto& cell = cells[i];
+
+        if (!cell.objects.empty()) {
+            cellHit = true;
+            if (i != 0) {
+                newCollision = GetRayCollisionBox(ray, cell.bounds);
+                cellHit = newCollision.hit && newCollision.distance < output.distance;
+            }
+            if (cellHit) {
+                for (auto drawObj : cell.objects) {
+                    if (renderedObjects.contains(drawObj))
+                        continue;
+                    renderedObjects.insert(drawObj);
+                    newCollision = GetRayCollisionBox(ray, drawObj->GetBounds());
+                    if (newCollision.hit && newCollision.distance < output.distance) {
+                        output = newCollision;
+                        object = drawObj;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void GameWorld::MoveObject(GameObject* object, Vector3 transform) {
+    if (auto* drawable = dynamic_cast<DrawableObject*>(object)) {
+        if (auto* physical = dynamic_cast<PhysicsObject*>(object)) {
+            drawableObjects.RemoveObject(drawable);
+            physicsWorld.MoveObject(physical, transform);
+            drawableObjects.AddObject(drawable);
+        }
+        else
+            drawableObjects.MoveObject(drawable, transform);
+    }
+}
+
+
+=== game_world.h ===
+#pragma once
+
+#include <raylib.h>
+#include <vector>
+
+#include "scope_marker.h"
+#include "log.h"
+#include "game_object.h"
+#include "uniform_grid.h"
+#include "physics_world.h"
+
+#include "enemy.h"
+#include "static_cube.h"
+#include "target.h"
+#include "frustum.h"
+
+class GameWorld {
+public:
+	static GameWorld& GetInstance() {
+		static GameWorld instance;
+		return instance;
+	}
+
+	GameWorld(const GameWorld&) = delete;
+	GameWorld& operator=(const GameWorld&) = delete;
+
+	bool updateFrustum = true;
+
+	void InitWorld();
+	void ClearWorld();
+
+	void UpdateWorld(float deltaTime);
+	void DrawWorld(Camera3D camera, bool showEditorObjects = false);
+
+	void AddObject(GameObject* object);
+	void AddSceneObjects(std::vector<GameObject*>& objects);
+	void RemoveObject(GameObject* object);
+
+	std::vector<GameObject*>& GetObjects();
+	void Raycast(Ray ray, RayCollision& output, DrawableObject*& object);
+
+	void MoveObject(GameObject* object, Vector3 transform);
+
+private:
+	GameWorld();
+
+	std::vector<GameObject*> objects;
+	UniformGrid<DrawableObject> drawableObjects;
+	std::vector<UpdatableObject*> updatableObjects;
+	PhysicsWorld physicsWorld;
+
+	Target* target = nullptr;
+
+	Frustum frustum;
+
+	int visibleObjects = 0;
+	int invisibleObjects = 0;
+};
+
+
+=== log.cpp ===
+#include "log.h"
+
+std::list<LogData> Logger::logs;
+
+void Logger::Log(std::string string) {
+    const GameSettings& settings = GameSettings::GetInstance();
+    logs.push_front({ string, settings.logShowTime });
+}
+
+void Logger::DrawLogs() {
+	int screenWidth = GetScreenWidth();
+	int offset = 5;
+    bool isFirstLog = true;
+
+    int n = 0;
+
+	for (LogData logData : logs) {
+        if (n > 40)
+            break;
+        n++;
+        
+        if (isFirstLog) {
+            int firstFontSize = logFontSize + (int)((float)logFontSize * 0.2f);
+            int textSize = MeasureText(logData.string.c_str(), firstFontSize);
+            DrawText(logData.string.c_str(), screenWidth - textSize - 5, offset, firstFontSize, BLACK);
+            offset += firstFontSize;
+        }
+        else {
+            int textSize = MeasureText(logData.string.c_str(), logFontSize);
+            DrawText(logData.string.c_str(), screenWidth - textSize - 5, offset, logFontSize, {20, 20, 20, 255});
+            offset += logFontSize;
+        }
+
+        isFirstLog = false;
+	}
+}
+
+void Logger::BeginFrame(float deltaTime) {
+    for (auto it = logs.begin(); it != logs.end(); ) {
+        it->remainingTime -= deltaTime;
+
+        if (it->remainingTime <= 0.0f) {
+            it = logs.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+}
+
+
+=== log.h ===
+#pragma once
+#include <raylib.h>
+#include <string>
+#include <list> 
+
+#include "game_settings.h"
+
+#define LOG(string) Logger::Log(string)
+
+struct LogData {
+	std::string string;
+	float remainingTime;
+};
+
+class Logger {
+private:
+	static const int logFontSize = 18;
+	static std::list<LogData> logs;
+
+public:
+	static void Log(std::string string);
+	static void DrawLogs();
+	static void BeginFrame(float deltaTime);
+};
+
+
+=== main.cpp ===
+#include "raylib.h"
+
+#include "player_camera.h"
+#include "game_world.h"
+#include "editor_camera.h"
+#include "editor.h"
+#include "map_save.h"
+
+#include "log.h"
+#include "scope_marker.h"
+#include "config_loader.h"
+#include "console.h"
+
+int main() {
+	SetConfigFlags(FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+
+	if (ConfigLoader::Load("config.txt")) {
+		LOG("Configuration loaded");
+	}
+	else {
+		LOG("Failed to load configuration");
+	}
+
+	InitWindow(1280, 720, "Lab 1");
+
+	GameWorld& gameWorld = GameWorld::GetInstance();
+	Editor editor{};
+
+	bool inEditor = false;
+
+	PlayerCamera camera;
+	EditorCamera editorCamera;
+
+	Console console;
+
+	MapSave::LoadFromFile();
+
+	while (!WindowShouldClose()) {
+		// UPDATE
+		float deltaTime = std::min(GetFrameTime(), 0.25f);
+		console.Update();
+
+		Logger::BeginFrame(deltaTime);
+		ScopeMarker::BeginFrame();
+
+		if (!console.IsOpen()) {
+			if (IsKeyPressed(KEY_F5)) {
+				if (ConfigLoader::Load("config.txt")) {
+					LOG("Configuration loaded");
+				}
+				else {
+					LOG("Failed to load configuration");
+				}
+			}
+			if (IsKeyPressed(KEY_F1)) {
+				editorCamera.SetFromCamera(camera.GetCameraData());
+				if (inEditor) {
+					MapSave::SaveToFile("temp");
+				}
+				MapSave::LoadFromFile("temp");
+
+				if (!inEditor) {
+					inEditor = true;
+					DisableCursor();
+					LOG("Switched to editor");
+				}
+				else {
+					inEditor = false;
+					EnableCursor();
+					LOG("Switched to game");
+				}
+			}
+			if (IsKeyPressed(KEY_F2)) {
+				MapSave::SaveToFile();
+			}
+			if (IsKeyPressed(KEY_F3)) {
+				MapSave::LoadFromFile();
+			}
+		}
+
+
+		SCOPE_MARKER(Frame, Frame);
+
+		if(!console.IsOpen())
+			inEditor
+			? editorCamera.Update(deltaTime)
+			: camera.Update(deltaTime);
+		
+		if (inEditor)
+			editor.Update(editorCamera.GetCamera(), deltaTime);
+		else
+			gameWorld.UpdateWorld(deltaTime);
+
+		// RENDER
+		SCOPE_MARKER(Render, Render);
+
+		BeginDrawing();
+		ClearBackground(DARKBLUE);
+
+		gameWorld.DrawWorld(inEditor
+			? editorCamera.GetCamera()
+			: camera.GetCameraData(), inEditor);
+
+		if (inEditor)
+			editor.Draw(editorCamera.GetCamera());
+
+		Logger::DrawLogs();
+		ScopeMarker::DrawMarkers();
+		console.Draw();
+
+		SCOPE_MARKER(EndDrawing, Render);
+		EndDrawing();
+	}
+
+	CloseWindow();
+	return 0;
+}
+
+
+=== map_save.cpp ===
+#include "map_save.h"
+#include "dynamic_sphere.h"
+#include "skittle.h"
+
+#include <sstream>
+#include <vector>
+
+bool MapSave::LoadFromFile(std::string filename) {
+	std::ifstream mapFile(filename + ".map");
+	if (!mapFile.is_open()) {
+		LOG("Failed to open map file " + filename + ".map when loading");
+		return false;
+	}
+
+	struct MapObject {
+		Objects type;
+		Vector3 position;
+	};
+
+	std::vector<MapObject> objects;
+	std::string line;
+	while (std::getline(mapFile, line)) {
+		if (line.empty()) {
+			continue;
+		}
+
+		std::istringstream record(line);
+		int type;
+		Vector3 position;
+		std::string extra;
+		if (!(record >> type >> position.x >> position.y >> position.z) ||
+			record >> extra ||
+			type < Objects::Cube1x1Pos || type > Objects::SkittlePos) {
+			LOG("Invalid record in map file " + filename + ".map");
+			return false;
+		}
+
+		objects.push_back({ static_cast<Objects>(type), position });
+	}
+
+	GameWorld& world = GameWorld::GetInstance();
+	world.ClearWorld();
+	bool targetLoaded = false;
+	bool cameraLoaded = false;
+	std::vector<GameObject*> parcedObjects;
+	for (const MapObject& object : objects) {
+		switch (object.type) {
+		case Objects::Cube1x1Pos:
+			parcedObjects.push_back(new StaticCube(object.position, { 1.0f, 1.0f, 1.0f }));
+			break;
+		case Objects::Cube10x10Pos:
+			parcedObjects.push_back(new StaticCube(object.position, { 10.0f, 1.0f, 10.0f }));
+			break;
+		case Objects::TargetPos:
+			if (!targetLoaded) {
+				parcedObjects.push_back(new Target(object.position));
+				targetLoaded = true;
+			}
+			break;
+		case Objects::DynamicSpherePos:
+			parcedObjects.push_back(new DynamicSphere(object.position));
+			break;
+		case Objects::SkittlePos:
+			parcedObjects.push_back(new Skittle(object.position));
+			break;
+		case Objects::CameraPos:
+			if (!cameraLoaded) {
+				parcedObjects.push_back(new CameraMarker(object.position));
+				PlayerCamera::GetCamera().SetPosition(object.position);
+				cameraLoaded = true;
+			}
+			break;
+		}
+	}
+	world.AddSceneObjects(parcedObjects);
+	MapSave::SaveToFile("temp");
+
+	LOG("Map loaded from " + filename + ".map");
+	return true;
+}
+
+bool MapSave::SaveToFile(std::string filename) {
+	std::ofstream mapFile(filename + ".map");
+	if (!mapFile.is_open()) {
+		LOG("Failed to open map file " + filename + ".map when saving");
+		return false;
+	}
+
+	bool targetSaved = false;
+	bool cameraSaved = false;
+	for (GameObject* object : GameWorld::GetInstance().GetObjects()) {
+		if (auto skittle = dynamic_cast<Skittle*>(object)) {
+			mapFile << Objects::SkittlePos << " " << skittle->position.x << " " << skittle->position.y << " " << skittle->position.z << std::endl;
+		}
+		else if (auto cube = dynamic_cast<StaticCube*>(object)) {
+			if(abs(cube->size.x - 10.0f) < 0.001f)
+				mapFile << Objects::Cube10x10Pos << " " << cube->position.x << " " << cube->position.y << " " << cube->position.z << std::endl;
+			else
+				mapFile << Objects::Cube1x1Pos << " " << cube->position.x << " " << cube->position.y << " " << cube->position.z << std::endl;
+		}
+		else if (auto target = dynamic_cast<Target*>(object)) {
+			if (targetSaved) {
+				LOG("Duplicate targets, only one is saved");
+				continue;
+			}
+			mapFile << Objects::TargetPos << " " << target->position.x << " " << target->position.y << " " << target->position.z<< std::endl;
+			targetSaved = true;
+		}
+		else if (auto camera = dynamic_cast<CameraMarker*>(object)) {
+			if (cameraSaved) {
+				LOG("Duplicate cameras, only one is saved");
+				continue;
+			}
+			mapFile << Objects::CameraPos << " " << camera->position.x << " " << camera->position.y << " " << camera->position.z << std::endl;
+			cameraSaved = true;
+		}
+		else if (auto sphere = dynamic_cast<DynamicSphere*>(object)) {
+			mapFile << Objects::DynamicSpherePos << " " << sphere->position.x << " " << sphere->position.y << " " << sphere->position.z << std::endl;
+		}
+	}
+
+	LOG("Map saved to " + filename + ".map");
+	return true;
+}
+
+
+=== map_save.h ===
+#pragma once
+
+#include <raylib.h>
+#include <fstream>
+
+#include "game_world.h"
+#include "log.h"
+#include "player_camera.h"
+
+#include "camera_marker.h"
+
+enum Objects {
+	Cube1x1Pos,
+	Cube10x10Pos,
+	TargetPos,
+	CameraPos,
+	DynamicSpherePos,
+	SkittlePos
+};
+
+class MapSave {
+public:
+	static bool LoadFromFile(std::string filename = "level");
+	static bool SaveToFile(std::string filename = "level");
+};
+
+
+=== physics_object.cpp ===
+#include "physics_object.h"
+#include <cmath>
+
+BoundingBox BoxCollider::GetBounds(const Quaternion& rotation)
+{
+    if (QuaternionEquals(rotation, lastRot)) {
+        lastRot = rotation;
+
+        const Matrix r = QuaternionToMatrix(rotation);
+        const Vector3 half = size / 2;
+        const Vector3 extent = {
+            fabsf(r.m0) * half.x + fabsf(r.m4) * half.y + fabsf(r.m8) * half.z,
+            fabsf(r.m1) * half.x + fabsf(r.m5) * half.y + fabsf(r.m9) * half.z,
+            fabsf(r.m2) * half.x + fabsf(r.m6) * half.y + fabsf(r.m10) * half.z
+        };
+        bounds.min = Vector3Negate(extent);
+        bounds.max = extent;
+    }
+    return bounds;
+}
+
+BoundingBox SphereCollider::GetBounds(const Quaternion&)
+{
+    return bounds;
+}
+
+BoundingBox PhysicsObject::GetBounds() const {
+    if (!properties.collider) {
+        return { position, position };
+    }
+    const BoundingBox bounds = properties.collider->GetBounds(rotation);
+    return {
+        bounds.min + position,
+        bounds.max + position
+    };
+}
+
+BoxCollider::BoxCollider(Vector3 size, float mass) : size(size) {
+    const float radius = Vector3Length(size) * 0.5f;
+    bounds.max = size / 2;
+    bounds.min = size / -2;
+
+    lastRot = QuaternionIdentity();
+
+    this->mass = mass > 0.0f ? mass : 0.0f;
+    inverseMass = this->mass > 0.0f ? 1.0f / this->mass : 0.0f;
+    inertiaTensor = MatrixIdentity();
+    inertiaTensor.m0 = this->mass * (size.y * size.y + size.z * size.z) / 12.0f;
+    inertiaTensor.m5 = this->mass * (size.x * size.x + size.z * size.z) / 12.0f;
+    inertiaTensor.m10 = this->mass * (size.x * size.x + size.y * size.y) / 12.0f;
+}
+
+SphereCollider::SphereCollider(float radius, float mass) : radius(radius) {
+    const float extent = std::abs(radius);
+    bounds = { Vector3{ -extent, -extent, -extent }, Vector3{ extent, extent, extent } };
+
+    this->mass = mass > 0.0f ? mass : 0.0f;
+    inverseMass = this->mass > 0.0f ? 1.0f / this->mass : 0.0f;
+    const float inertia = 0.4f * this->mass * radius * radius;
+    inertiaTensor = MatrixIdentity();
+    inertiaTensor.m0 = inertia;
+    inertiaTensor.m5 = inertia;
+    inertiaTensor.m10 = inertia;
+}
+
+PhysicsObject::PhysicsObject(ObjectType type, Collider* collider, float elasticity) {
+    properties.collider = collider;
+    properties.elasticity = elasticity;
+    properties.type = type;
+
+    if (type != ObjectType::_dynamic)
+        properties.collider->inverseMass = 0;
+}
+
+PhysicsProperty const PhysicsObject::GetProperties() const
+{
+    return properties;
+}
+
+void PhysicsObject::AddImpulse(Vector3 impulse) {
+    if (properties.collider) {
+        properties.velocity += Vector3Scale(impulse, properties.collider->inverseMass);
+    }
+}
+
+void PhysicsObject::AddImpulseAtPoint(Vector3 impulse, Vector3 point) {
+    AddImpulse(impulse);
+    ApplyAngularImpulse(impulse, point);
+}
+
+void PhysicsObject::AddForce(Vector3 force) {
+    if (properties.collider) {
+        properties.velocity += Vector3Scale(force, properties.collider->inverseMass);
+    }
+}
+
+void PhysicsObject::AddForceAtPoint(Vector3 force, Vector3 point) {
+    AddForce(force);
+    ApplyAngularImpulse(force, point);
+}
+
+void PhysicsObject::ApplyAngularDamping(float damping) {
+    const float dampingFactor = 1.0f - damping;
+    properties.rotationVelocity.x *= dampingFactor;
+    properties.rotationVelocity.y *= dampingFactor;
+    properties.rotationVelocity.z *= dampingFactor;
+}
+
+void PhysicsObject::RotateObject(Quaternion rotation) {
+    this->rotation = QuaternionNormalize(QuaternionMultiply(this->rotation, rotation));
+}
+
+void PhysicsObject::ApplyAngularImpulse(Vector3 impulse, Vector3 point) {
+    if (!properties.collider || properties.collider->inverseMass <= 0.0f) {
+        return;
+    }
+
+    const Vector3 torque = Vector3CrossProduct(point, impulse);
+    const Quaternion inverseRotation = QuaternionInvert(rotation);
+    const Vector3 localTorque = Vector3RotateByQuaternion(torque, inverseRotation);
+    const Matrix& inertiaTensor = properties.collider->inertiaTensor;
+    Vector3 localAngularVelocity = { 0.0f, 0.0f, 0.0f };
+    if (inertiaTensor.m0 > 0.0f) localAngularVelocity.x = localTorque.x / inertiaTensor.m0;
+    if (inertiaTensor.m5 > 0.0f) localAngularVelocity.y = localTorque.y / inertiaTensor.m5;
+    if (inertiaTensor.m10 > 0.0f) localAngularVelocity.z = localTorque.z / inertiaTensor.m10;
+
+    const Vector3 angularVelocity = Vector3RotateByQuaternion(localAngularVelocity, rotation);
+    properties.rotationVelocity.x += angularVelocity.x;
+    properties.rotationVelocity.y += angularVelocity.y;
+    properties.rotationVelocity.z += angularVelocity.z;
+}
+
+
+=== physics_object.h ===
+#pragma once
+
+#include "game_object.h"
+#include <memory>
+#include <raymath.h>
+
+enum class ObjectType {
+    _dynamic,
+    _kinematic,
+    _static
+};
+
+class Collider {
+public:
+    virtual BoundingBox GetBounds(const Quaternion& rotation) = 0;
+
+    float mass = 1.f;
+    float inverseMass = 1.f;
+    Matrix inertiaTensor = {};
+
+    virtual ~Collider() = default;
+protected:
+    BoundingBox bounds = {};
+};
+
+struct BoxCollider : Collider {
+    Vector3 size = {};
+
+    BoundingBox GetBounds(const Quaternion& rotation) override;
+    BoxCollider(Vector3 size = { 1.f, 1.f, 1.f }, float mass = 1.0f);
+
+private:
+    Quaternion lastRot; 
+};
+
+struct SphereCollider : Collider {
+    float radius = 0.0f;
+
+    BoundingBox GetBounds(const Quaternion& rotation) override;
+    SphereCollider(float radius = 1.0f, float mass = 1.0f);
+};
+
+struct PhysicsProperty {
+    float elasticity = .95f;
+
+    Vector3 velocity = { 0.0f, 0.0f, 0.0f };
+    Quaternion rotationVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+    Vector3 impulse = { 0.0f, 0.0f, 0.0f };
+    Quaternion rotationImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    ObjectType type = ObjectType::_static;
+    Collider* collider = nullptr;
+};
+
+class PhysicsObject;
+
+struct CollisionResult {
+    PhysicsObject* objA;
+    PhysicsObject* objB;
+    Vector3 position;
+    Vector3 normal;
+    float penetration;
+};
+
+class PhysicsObject : public virtual GameObject {
+public:
+    PhysicsProperty const GetProperties() const;
+
+    virtual ~PhysicsObject() {
+        delete properties.collider;
+    }
+
+    PhysicsObject(const PhysicsObject&) = delete;
+    PhysicsObject& operator=(const PhysicsObject&) = delete;
+
+    void AddImpulse(Vector3 impulse);
+    void AddImpulseAtPoint(Vector3 impulse, Vector3 point);
+    void AddForce(Vector3 force);
+    void AddForceAtPoint(Vector3 force, Vector3 point);
+    void ApplyAngularDamping(float damping);
+
+    void RotateObject(Quaternion rotation);
+    void ApplyAngularImpulse(Vector3 impulse, Vector3 point);
+
+    virtual void OnCollisionEnter(PhysicsObject* other, const CollisionResult& result) {}
+    virtual void OnCollisionStay(PhysicsObject* other, const CollisionResult& result) {}
+    virtual void OnCollisionExit(PhysicsObject* other) {}
+
+    BoundingBox GetBounds() const override;
+protected:
+    PhysicsObject(ObjectType type, Collider* collider, float elasticity);
+    PhysicsProperty properties;
+};
+
+
+=== physics_world.cpp ===
+#include "physics_world.h"
+#include <algorithm>
+#include <cmath>
+#include "game_world.h"
+
+void PhysicsWorld::Update(float deltaTime) {
+    SCOPE_MARKER(Update, Physics);
+    
+    if (isUpdated) {
+        staticObjects.Update();
+        isUpdated = false;
+    }
+
+    for (auto object : dynamicObjects) {
+        if (!object || !object->active) continue;
+
+        auto& properties = object->GetProperties();
+
+        object->AddForce(Vector3Scale(Vector3{ 0.f, -9.8f, 0.f }, properties.collider->mass * deltaTime));
+        object->AddForce(Vector3Scale(properties.velocity, -0.05f * deltaTime));
+        object->ApplyAngularDamping(0.05f);
+    }
+
+    ApplyForces(deltaTime);
+    SolveCollisions();
+}
+
+void PhysicsWorld::AddObject(PhysicsObject* object) {
+    if (object == nullptr) return;
+
+    if (object->GetProperties().type == ObjectType::_static) {
+        isUpdated = true;
+        staticObjects.AddObject(object);
+    }
+    else {
+        dynamicObjects.push_back(object);
+    }
+}
+
+void PhysicsWorld::MoveObject(PhysicsObject* object, Vector3 transform) {
+    if (!object) return;
+
+    object->position = Vector3Add(object->position, transform);
+
+    if (object->GetProperties().type == ObjectType::_static) {
+        staticObjects.Update();
+    }
+}
+
+void PhysicsWorld::RemoveObject(PhysicsObject* object) {
+    if (object == nullptr) return;
+
+    for (auto it = previousCollisions.begin(); it != previousCollisions.end(); ) {
+        if (it->first == object || it->second == object) {
+            PhysicsObject* other = (it->first == object) ? it->second : it->first;
+            other->OnCollisionExit(object);
+            it = previousCollisions.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+
+    if (object->GetProperties().type == ObjectType::_static) {
+        isUpdated = true;
+        staticObjects.RemoveObject(object);
+    }
+    else {
+        auto it = std::find(dynamicObjects.begin(), dynamicObjects.end(), object);
+        if (it != dynamicObjects.end()) {
+            *it = dynamicObjects.back();
+            dynamicObjects.pop_back();
+        }
+    }
+}
+
+void PhysicsWorld::ApplyForces(float deltaTime) {
+    SCOPE_MARKER(ApplyForces, Physics);
+    const float step = std::min(deltaTime, 0.02f);
+
+    for (PhysicsObject* object : dynamicObjects) {
+        if (object == nullptr || !object->active) continue;
+
+        const PhysicsProperty properties = object->GetProperties();
+        if (properties.type != ObjectType::_dynamic || properties.collider == nullptr ||
+            properties.collider->inverseMass <= 0.0f) {
+            continue;
+        }
+
+        const Vector3 translation = Vector3Scale(properties.velocity, step);
+        if (Vector3LengthSqr(translation) > 0.0f) {
+            GameWorld::GetInstance().MoveObject(object, translation);
+        }
+
+        const Vector3 angularVelocity = {
+            properties.rotationVelocity.x,
+            properties.rotationVelocity.y,
+            properties.rotationVelocity.z
+        };
+        const Vector3 localAngularVelocity = Vector3RotateByQuaternion(
+            angularVelocity,
+            QuaternionInvert(object->rotation));
+        const float angularSpeed = Vector3Length(localAngularVelocity);
+
+        if (angularSpeed > 0.000001f) {
+            const Quaternion deltaRotation = QuaternionFromAxisAngle(
+                Vector3Scale(localAngularVelocity, 1.0f / angularSpeed),
+                angularSpeed * step);
+            object->RotateObject(deltaRotation);
+        }
+    }
+}
+
+void PhysicsWorld::SolveCollisions() {
+    SCOPE_MARKER(SolveCollisions, Physics);
+    std::vector<CollisionResult> contacts;
+    std::set<CollisionPair> currentCollisions;
+
+    // 1. РЁРёСЂРѕРєР° С„Р°Р·Р°
+    {
+        SCOPE_MARKER(BroadPhase, Physics);
+        for (size_t i = 0; i < dynamicObjects.size(); ++i) {
+            PhysicsObject* objA = dynamicObjects[i];
+            if (!objA || !objA->active) continue;
+
+            // Р”РёРЅР°РјС–С‡РЅС– vs РЎС‚Р°С‚РёС‡РЅС–
+            std::vector<PhysicsObject*> staticHits = staticObjects.CheckIntersection(objA->GetBounds());
+            for (PhysicsObject* objB : staticHits) {
+                CollisionResult result;
+                if (CheckCollision(objA, objB, result)) {
+                    contacts.push_back(result);
+
+                    CollisionPair pair = (objA < objB) ? std::make_pair(objA, objB) : std::make_pair(objB, objA);
+                    currentCollisions.insert(pair);
+
+                    if (previousCollisions.find(pair) == previousCollisions.end()) {
+                        objA->OnCollisionEnter(objB, result);
+                        objB->OnCollisionEnter(objA, result);
+                    }
+                    else {
+                        objA->OnCollisionStay(objB, result);
+                        objB->OnCollisionStay(objA, result);
+                    }
+                }
+            }
+
+            // Р”РёРЅР°РјС–С‡РЅС– vs Р”РёРЅР°РјС–С‡РЅС–
+            for (size_t j = i + 1; j < dynamicObjects.size(); ++j) {
+                PhysicsObject* objB = dynamicObjects[j];
+                if (!objB || !objB->active) continue;
+                if (CheckCollisionBoxes(objA->GetBounds(), objB->GetBounds())) {
+                    CollisionResult result;
+                    if (CheckCollision(objA, objB, result)) {
+                        contacts.push_back(result);
+
+                        CollisionPair pair = (objA < objB) ? std::make_pair(objA, objB) : std::make_pair(objB, objA);
+                        currentCollisions.insert(pair);
+
+                        if (previousCollisions.find(pair) == previousCollisions.end()) {
+                            objA->OnCollisionEnter(objB, result);
+                            objB->OnCollisionEnter(objA, result);
+                        }
+                        else {
+                            objA->OnCollisionStay(objB, result);
+                            objB->OnCollisionStay(objA, result);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+
+    for (const auto& pair : previousCollisions) {
+        if (currentCollisions.find(pair) == currentCollisions.end()) {
+            pair.first->OnCollisionExit(pair.second);
+            pair.second->OnCollisionExit(pair.first);
+        }
+    }
+
+    previousCollisions = currentCollisions;
+
+    {
+        SCOPE_MARKER(NarrowPhase, Physics);
+        const int solverIterations = 1;
+        for (int i = 0; i < solverIterations; ++i) {
+            for (auto& contact : contacts) {
+                ResolveContact(contact);
+            }
+        }
+    }
+}
+
+bool PhysicsWorld::CheckCollision(PhysicsObject* objA, PhysicsObject* objB, CollisionResult& result) {
+    Collider* colA = objA->GetProperties().collider;
+    Collider* colB = objB->GetProperties().collider;
+
+    BoxCollider* boxA = dynamic_cast<BoxCollider*>(colA);
+    SphereCollider* sphereA = dynamic_cast<SphereCollider*>(colA);
+
+    BoxCollider* boxB = dynamic_cast<BoxCollider*>(colB);
+    SphereCollider* sphereB = dynamic_cast<SphereCollider*>(colB);
+
+    if (boxA && boxB) 
+        return BoxBoxCollision(objA, boxA, objB, boxB, result);
+    if (sphereA && sphereB) 
+        return SphereSphereCollision(objA, sphereA, objB, sphereB, result);
+    if (sphereA && boxB) 
+        return SphereBoxCollision(objA, sphereA, objB, boxB, result);
+    if (boxA && sphereB) {
+        bool hit = SphereBoxCollision(objB, sphereB, objA, boxA, result);
+        if (hit) {
+            result.normal = Vector3Scale(result.normal, -1.0f);
+            result.objA = objA;
+            result.objB = objB;
+        }
+        return hit;
+    }
+    return false;
+}
+
+bool PhysicsWorld::SphereSphereCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, SphereCollider* b, CollisionResult& result) {
+    Vector3 diff = Vector3Subtract(objB->position, objA->position);
+    float distSqr = Vector3LengthSqr(diff);
+    float radiusSum = a->radius + b->radius;
+
+    if (distSqr >= radiusSum * radiusSum) return false;
+
+    float dist = sqrtf(distSqr);
+    result.objA = objA;
+    result.objB = objB;
+
+    if (dist == 0.0f) {
+        result.normal = { 0.0f, 1.0f, 0.0f };
+        result.penetration = a->radius;
+    }
+    else {
+        result.normal = Vector3Scale(diff, 1.0f / dist);
+        result.penetration = radiusSum - dist;
+    }
+    result.position = Vector3Add(objA->position, Vector3Scale(result.normal, a->radius));
+    return true;
+}
+bool PhysicsWorld::BoxBoxCollision(PhysicsObject* objA, BoxCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionResult& result) {
+    BoundingBox boxA = objA->GetBounds();
+    BoundingBox boxB = objB->GetBounds();
+
+    Vector3 centerA = { (boxA.min.x + boxA.max.x) * 0.5f, (boxA.min.y + boxA.max.y) * 0.5f, (boxA.min.z + boxA.max.z) * 0.5f };
+    Vector3 centerB = { (boxB.min.x + boxB.max.x) * 0.5f, (boxB.min.y + boxB.max.y) * 0.5f, (boxB.min.z + boxB.max.z) * 0.5f };
+
+    Vector3 halfExtentsA = { (boxA.max.x - boxA.min.x) * 0.5f, (boxA.max.y - boxA.min.y) * 0.5f, (boxA.max.z - boxA.min.z) * 0.5f };
+    Vector3 halfExtentsB = { (boxB.max.x - boxB.min.x) * 0.5f, (boxB.max.y - boxB.min.y) * 0.5f, (boxB.max.z - boxB.min.z) * 0.5f };
+
+    Vector3 distance = Vector3Subtract(centerB, centerA);
+
+    float overlapX = (halfExtentsA.x + halfExtentsB.x) - std::abs(distance.x);
+    if (overlapX <= 0.0f) return false;
+
+    float overlapY = (halfExtentsA.y + halfExtentsB.y) - std::abs(distance.y);
+    if (overlapY <= 0.0f) return false;
+
+    float overlapZ = (halfExtentsA.z + halfExtentsB.z) - std::abs(distance.z);
+    if (overlapZ <= 0.0f) return false;
+
+    result.objA = objA;
+    result.objB = objB;
+
+    if (overlapX < overlapY && overlapX < overlapZ) {
+        result.penetration = overlapX;
+        result.normal = (distance.x < 0) ? Vector3{ -1, 0, 0 } : Vector3{ 1, 0, 0 };
+    }
+    else if (overlapY < overlapZ) {
+        result.penetration = overlapY;
+        result.normal = (distance.y < 0) ? Vector3{ 0, -1, 0 } : Vector3{ 0, 1, 0 };
+    }
+    else {
+        result.penetration = overlapZ;
+        result.normal = (distance.z < 0) ? Vector3{ 0, 0, -1 } : Vector3{ 0, 0, 1 };
+    }
+
+    result.position = Vector3Add(centerA, Vector3Scale(result.normal, halfExtentsA.x));
+    return true;
+}
+bool PhysicsWorld::SphereBoxCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionResult& result) {
+    BoundingBox box = objB->GetBounds();
+    Vector3 spherePos = objA->position;
+
+    Vector3 closestPoint = {
+        std::clamp(spherePos.x, box.min.x, box.max.x),
+        std::clamp(spherePos.y, box.min.y, box.max.y),
+        std::clamp(spherePos.z, box.min.z, box.max.z)
+    };
+
+    Vector3 diff = Vector3Subtract(spherePos, closestPoint);
+    float distSqr = Vector3LengthSqr(diff);
+
+    if (distSqr > a->radius * a->radius) return false;
+
+    result.objA = objA;
+    result.objB = objB;
+    float dist = sqrtf(distSqr);
+
+    if (dist == 0.0f) {
+        result.normal = { 0, 1, 0 };
+        result.penetration = a->radius;
+        result.position = closestPoint;
+    }
+    else {
+        result.penetration = a->radius - dist;
+        result.normal = Vector3Scale(diff, -1.0f / dist);
+        result.position = closestPoint;
+    }
+    return true;
+}
+
+void PhysicsWorld::ResolveContact(CollisionResult& contact) {
+    PhysicsObject* objA = contact.objA;
+    PhysicsObject* objB = contact.objB;
+
+    float invMassA = objA->GetProperties().collider->inverseMass;
+    float invMassB = objB->GetProperties().collider->inverseMass;
+
+    if (invMassA == 0.0f && invMassB == 0.0f) 
+        return;
+
+    Vector3 relVel = Vector3Subtract(objB->GetProperties().velocity, objA->GetProperties().velocity);
+    float velAlongNormal = Vector3DotProduct(relVel, contact.normal);
+
+    if (velAlongNormal > 0.0f) 
+        return;
+
+    float e = objA->GetProperties().elasticity * objB->GetProperties().elasticity;
+
+    float j = -(1.0f + e) * velAlongNormal;
+    j /= (invMassA + invMassB);
+
+    Vector3 impulse = Vector3Scale(contact.normal, j);
+
+    if (invMassA > 0.0f) 
+        objA->AddImpulse(Vector3Scale(impulse, -1.0f));
+    if (invMassB > 0.0f) 
+        objB->AddImpulse(impulse);
+
+    const float percent = 0.8f;
+    const float slop = 0.05f;
+    Vector3 correction = Vector3Scale(contact.normal, (std::max(contact.penetration - slop, 0.0f) / (invMassA + invMassB)) * percent);
+
+    if (invMassA > 0.0f) {
+        Vector3 moveA = Vector3Scale(correction, -invMassA);
+        GameWorld::GetInstance().MoveObject(objA, moveA);
+    }
+    if (invMassB > 0.0f) {
+        Vector3 moveB = Vector3Scale(correction, invMassB);
+        GameWorld::GetInstance().MoveObject(objB, moveB);
+    }
+}
+
+bool PhysicsWorld::Raycast(Ray ray, RaycastHit& hitResult, float maxDistance) {
+    bool hit = false;
+    hitResult.distance = maxDistance;
+
+    // Р”РёРЅР°РјС–С‡РЅС– РѕР±'С”РєС‚Рё
+    for (auto obj : dynamicObjects) {
+        if (!obj || !obj->active) continue;
+        RayCollision col = GetRayCollisionBox(ray, obj->GetBounds());
+        if (col.hit && col.distance < hitResult.distance) {
+            hitResult.distance = col.distance;
+            hitResult.normal = col.normal;
+            hitResult.point = col.point;
+            hitResult.object = obj;
+            hit = true;
+        }
+    }
+
+    // РЎС‚Р°С‚РёС‡РЅС– РѕР±'С”РєС‚Рё
+    BoundingBox rayBox;
+    Vector3 endPos = Vector3Add(ray.position, Vector3Scale(ray.direction, maxDistance));
+    rayBox.min = { std::min(ray.position.x, endPos.x), std::min(ray.position.y, endPos.y), std::min(ray.position.z, endPos.z) };
+    rayBox.max = { std::max(ray.position.x, endPos.x), std::max(ray.position.y, endPos.y), std::max(ray.position.z, endPos.z) };
+
+    std::vector<PhysicsObject*> potentialStatics = staticObjects.CheckIntersection(rayBox);
+    for (auto obj : potentialStatics) {
+        RayCollision col = GetRayCollisionBox(ray, obj->GetBounds());
+        if (col.hit && col.distance < hitResult.distance) {
+            hitResult.distance = col.distance;
+            hitResult.normal = col.normal;
+            hitResult.point = col.point;
+            hitResult.object = obj;
+            hit = true;
+        }
+    }
+
+    return hit;
+}
+
+
+=== physics_world.h ===
+#pragma once
+#include <vector>
+#include <set>
+#include <utility>
+#include <raylib.h>
+#include "physics_object.h"
+#include "uniform_grid.h"
+#include "scope_marker.h"
+#include "BVH.h"
+
+struct RaycastHit {
+    PhysicsObject* object = nullptr;
+    Vector3 point = { 0 };
+    Vector3 normal = { 0 };
+    float distance = 0.0f;
+};
+
+class PhysicsWorld {
+public:
+    void Update(float deltaTime);
+
+    void AddObject(PhysicsObject* object);
+    void MoveObject(PhysicsObject* object, Vector3 transform);
+    void RemoveObject(PhysicsObject* object);
+
+    bool Raycast(Ray ray, RaycastHit& hitResult, float maxDistance = 1000.0f);
+
+private:
+    void SolveCollisions();
+    void ApplyForces(float deltaTime);
+
+    bool CheckCollision(PhysicsObject* objA, PhysicsObject* objB, CollisionResult& result);
+    bool BoxBoxCollision(PhysicsObject* objA, BoxCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionResult& result);
+    bool SphereBoxCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionResult& result);
+    bool SphereSphereCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, SphereCollider* b, CollisionResult& result);
+
+    void ResolveContact(CollisionResult& contact);
+
+    std::vector<PhysicsObject*> dynamicObjects;
+    bool isUpdated = true;
+    BVH staticObjects;
+
+    using CollisionPair = std::pair<PhysicsObject*, PhysicsObject*>;
+    std::set<CollisionPair> previousCollisions;
+};
+
+
+=== player_camera.cpp ===
+#include "player_camera.h"
+#include "target.h"
+
+PlayerCamera* PlayerCamera::currentCamera = nullptr;
+
+void PlayerCamera::Move(Vector3 transform) {
+	camera.position += transform;
+
+	Target* target = Target::GetCurrentTarget();
+	if (target != nullptr) {
+		camera.target = target->position;
+
+		Vector3 targetDir = target->position - camera.position;
+		targetDir.y = 0;
+		float dist = Vector3Length(targetDir);
+
+		if (dist < 10.f && dist > 0.f) {
+			camera.position -= Vector3Normalize(targetDir) * (10.f - dist);
+		}
+	}
+	else {
+		camera.target = camera.position + direction;
+	}
+}
+
+void PlayerCamera::Reset() {
+	camera.position = startPosition;
+	if (Target::GetCurrentTarget() != nullptr)
+		camera.target = Target::GetCurrentTarget()->position;
+	else
+		camera.target = camera.position + direction;
+}
+
+PlayerCamera::PlayerCamera() {
+	currentCamera = this;
+	float angle = 60.0f * (PI / 180.0f);
+	direction = Vector3(cosf(angle), -sinf(angle), 0);
+	speed = 40;
+	startPosition = { -51.0f, 60.0f, 0.0f };
+
+	camera.position = startPosition;
+	camera.target = camera.position + direction;
+	camera.up = { 0.0f, 1.0f, 0.0f };
+	camera.fovy = 60.0f;
+	camera.projection = CAMERA_PERSPECTIVE;
+}
+
+PlayerCamera::~PlayerCamera() {
+	if (currentCamera == this)
+		currentCamera = nullptr;
+}
+
+PlayerCamera& PlayerCamera::GetCamera() {
+	return *currentCamera;
+}
+
+Camera3D PlayerCamera::GetCameraData() const {
+	return camera;
+}
+
+void PlayerCamera::SetPosition(Vector3 position) {
+	camera.position = position;
+	camera.target = camera.position + direction;
+}
+
+void PlayerCamera::Update(float deltaTime) {
+	Vector3 moveDirection = Vector3Zero();
+
+	if (Target::GetCurrentTarget() != nullptr)
+		camera.target = Target::GetCurrentTarget()->position;
+
+	Vector3 forward = camera.target - camera.position;
+	forward.y = 0.0f;
+	if (Vector3LengthSqr(forward) > 0.0f)
+		forward = Vector3Normalize(forward);
+	else
+		forward = { 1.0f, 0.0f, 0.0f };
+
+	const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera.up));
+
+	if (IsKeyDown(KEY_W))
+		moveDirection += forward;
+	if (IsKeyDown(KEY_S))
+		moveDirection -= forward;
+	if (IsKeyDown(KEY_A))
+		moveDirection -= right;
+	if (IsKeyDown(KEY_D))
+		moveDirection += right;
+
+	if (Vector3LengthSqr(moveDirection) > 0.0f) {
+		moveDirection = Vector3Normalize(moveDirection);
+		moveDirection *= speed * deltaTime;
+		Move(moveDirection);
+	}
+}
+
+
+=== player_camera.h ===
+#pragma once
+#include "raylib.h"
+#include "raymath.h"
+#include "log.h"
+
+class PlayerCamera {
+private:
+	static PlayerCamera* currentCamera;
+	Camera3D camera;
+
+	Vector3 startPosition;
+	Vector3 direction;
+	float speed;
+
+	void Move(Vector3 direction);
+	void Reset();
+public:
+
+	PlayerCamera();
+	~PlayerCamera();
+	static PlayerCamera& GetCamera();
+	Camera3D GetCameraData() const;
+	void SetPosition(Vector3 position);
+	void Update(float deltaTime);
+};
+
+
+=== scope_marker.cpp ===
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define NOUSER
+#define NOGDI
+#include <windows.h>
+#include <algorithm>
+
+#include "scope_marker.h"
+
+std::vector<MarkerData> ScopeMarker::markers;
+std::vector<MarkerData> ScopeMarker::averageMarkers;
+
+ScopeMarker::ScopeMarker(std::string name, std::string category) {
+	data.name = name;
+	data.category = category;
+
+	LARGE_INTEGER timerFrequency;
+	LARGE_INTEGER timerStart;
+	QueryPerformanceFrequency(&timerFrequency);
+	QueryPerformanceCounter(&timerStart);
+
+	frequency = timerFrequency.QuadPart;
+	startTime = timerStart.QuadPart;
+}
+
+ScopeMarker::~ScopeMarker() {
+	LARGE_INTEGER currentTime;
+	QueryPerformanceCounter(&currentTime);
+	data.duration = static_cast<double>(currentTime.QuadPart - startTime) * 1000.0 / frequency;
+
+	markers.push_back(data);
+}
+
+void ScopeMarker::BeginFrame() {
+	std::vector<MarkerData> frameAverages;
+	for (const MarkerData& marker : markers) {
+		auto existing = std::find_if(averageMarkers.begin(), averageMarkers.end(), [&](const MarkerData& averageMarker) {
+			return averageMarker.name == marker.name && averageMarker.category == marker.category;
+		});
+		if (existing == averageMarkers.end())
+			frameAverages.push_back(marker);
+		else
+			frameAverages.push_back({ marker.name, marker.category, (marker.duration + existing->duration) / 2 });
+	}
+
+	averageMarkers.swap(frameAverages);
+	markers.clear();
+}
+
+void ScopeMarker::DrawMarkers() {
+	int fontSize = 18;
+	int y = 5 + fontSize;
+
+	std::string previousCategory = "";
+	for (const MarkerData& marker : averageMarkers) {
+		if (previousCategory != marker.category) {
+			DrawText(marker.category.c_str(), 5, y + 5, fontSize, BLACK);
+			previousCategory = marker.category;
+			y += fontSize + 5;
+		}
+		DrawText(("	" + marker.name).c_str(), 5, y, fontSize, BLACK);
+		DrawText(std::format("{:.2f}ms", marker.duration).c_str(), 180, y, fontSize, BLACK);
+
+		y += fontSize;
+	}
+}
+
+
+=== scope_marker.h ===
+#pragma once
+#include <string>
+#include <vector>
+#include <raylib.h>
+#include <map>
+#include <format>
+
+#define SCOPE_MARKER(name, category) auto __##name = ScopeMarker(#name, #category)
+
+struct MarkerData {
+	std::string name;
+	std::string category;
+	double duration;
+};
+
+class ScopeMarker {
+private:
+	static std::vector<MarkerData> markers;
+	static std::vector<MarkerData> averageMarkers;
+
+	MarkerData data;
+
+	long long frequency;
+	long long startTime;
+
+public:
+	ScopeMarker(std::string name, std::string category = "");
+	~ScopeMarker();
+
+	static void BeginFrame();
+	static void DrawMarkers();
+};
+
+
+=== skittle.cpp ===
+#include "skittle.h"
+
+std::unique_ptr<Model> Skittle::model;
+std::unique_ptr<Texture2D> Skittle::texture;
+
+
+Skittle::Skittle(Vector3 position)
+    : PhysicsObject(ObjectType::_dynamic, new BoxCollider({0.8f, 2.f, 0.8f}, 2.f), 0.15f) {
+    this->position = position;
+    if (texture == nullptr)
+        texture = std::make_unique<Texture2D>(LoadTexture("resources/skittle.png"));
+    if (model == nullptr) {
+        model = std::make_unique<Model>(LoadModel("resources/skittle.obj"));
+        model->materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = *texture;
+    }
+}
+
+void Skittle::Draw() const {
+    DrawModel(*model, position, 1, WHITE);
+}
+
+BoundingBox Skittle::GetBounds() const {
+    return {
+        position - Vector3{ 0.45f, 1.f, 0.45f },
+        position + Vector3{ 0.45f, 1.f, 0.45f }
+    };
+}
+
+
+=== skittle.h ===
+#pragma once
+
+#include "game_object.h"
+#include "physics_object.h"
+
+class Skittle : public DrawableObject, public PhysicsObject {
+public:
+	Skittle(Vector3 position);
+
+	void Draw() const override;
+	BoundingBox GetBounds() const override;
+
+private:
+
+	static std::unique_ptr<Model> model;
+	static std::unique_ptr<Texture2D> texture;
+};
+
+
+=== static_cube.cpp ===
+#include "static_cube.h"
+#include "raymath.h"
+
+StaticCube::StaticCube(Vector3 position, Vector3 size = { 1.0f, 1.0f, 1.0f }) 
+    : PhysicsObject(ObjectType::_static, new BoxCollider(size, size.x * size.y * size.z), 0.1) {
+    this->position = position;
+    this->size = size;
+    color = WHITE;
+
+    Vector3 halfSize = size * 0.5f;
+}
+
+void StaticCube::Draw() const {
+    DrawCube(position, size.x, size.y, size.z, color);
+    DrawCubeWires(position, size.x, size.y, size.z, GRAY);
+}
+
+BoundingBox StaticCube::GetBounds() const {
+    return { position - size / 2, position + size / 2 };
+}
+
+
+=== static_cube.h ===
+#pragma once
+#include <raylib.h>
+
+#include "game_object.h"
+#include "physics_object.h"
+
+class StaticCube : public DrawableObject, public PhysicsObject {
+public:
+	Vector3 size;
+
+	StaticCube(Vector3 position, Vector3 size);
+    void Draw() const override;
+    BoundingBox GetBounds() const override;
+
+private:
+	Color color;
+};
+
+
+=== target.cpp ===
+#include "target.h"
+#include "raymath.h"
+
+Target* Target::currentTarget = nullptr;
+
+Target::Target(Vector3 position, bool setMain) 
+    : PhysicsObject(ObjectType::_static, new BoxCollider({1.f, 2.f, 1.f}), 0.5f) {
+    this->position = position;
+    color = GREEN;
+    if(setMain)
+        currentTarget = this;
+}
+
+Target::~Target() {
+    if (currentTarget == this) {
+        currentTarget = nullptr;
+    }
+}
+
+Target* Target::GetCurrentTarget() {
+    return currentTarget;
+}
+
+void Target::Draw() const {
+    DrawCube(position, 1.0f, 2.0f, 1.0f, color);
+    DrawCubeWires(position, 1.0f, 2.0f, 1.0f, DARKPURPLE);
+}
+
+BoundingBox Target::GetBounds() const {
+    return {
+        position - Vector3{ 0.5f, 1.0f, 0.5f },
+        position + Vector3{ 0.5f, 1.0f, 0.5f }
+    };
+}
+
+
+=== target.h ===
+#pragma once
+#include <raylib.h>
+
+#include "game_object.h"
+#include "physics_object.h"
+
+class Target : public DrawableObject, public PhysicsObject {
+public:
+	Target(Vector3 position, bool setMain = true);
+	~Target();
+	static Target* GetCurrentTarget();
+	void Draw() const override;
+	BoundingBox GetBounds() const override;
+
+private:
+	static Target* currentTarget;
+	Color color;
+};
+
+
+
+=== uniform_grid.h ===
+#pragma once
+
+#include <raylib.h>
+#include <raymath.h>
+#include <algorithm>
+#include <cmath>
+#include <vector>
+
+#include "log.h"
+#include "game_object.h"
+
+struct CellCoord {
+	int x, y, z;
+	CellCoord(int x, int y, int z) : x(x), y(y), z(z) {};
+};
+
+template <std::derived_from<GameObject> T>
+struct GridCell {
+	CellCoord pos{ 0, 0, 0 };
+	BoundingBox bounds;
+	std::vector<T*> objects;
+};
+
+template <std::derived_from<GameObject> T>
+class UniformGrid {
+public:
+	void Clear() {
+		for (GridCell<T>& cell : cells) {
+			cell.objects.clear();
+		}
+		totalObjects = 0;
+	}
+	void GenerateGrid(Vector3 position, CellCoord size, Vector3 cellSize = { 1.f,1.f,1.f }) {
+		this->position = position;
+		this->size = size;
+		this->cellSize = cellSize;
+		GenGrid();
+	}
+	void GenerateGrid(BoundingBox bounds, Vector3 cellSize = { 1.f,1.f,1.f }) {
+		this->cellSize = cellSize;
+
+		size = {
+			static_cast<int>(std::ceil((bounds.max.x - bounds.min.x) / cellSize.x)) + padding * 2,
+			static_cast<int>(std::ceil((bounds.max.y - bounds.min.y) / cellSize.y)) + padding * 2,
+			static_cast<int>(std::ceil((bounds.max.z - bounds.min.z) / cellSize.z)) + padding * 2
+		};
+		position = bounds.min - padding * cellSize;
+
+		GenGrid();
+	}
+	BoundingBox CalculateBoundingBox(std::vector<GameObject*>& objects) {
+		BoundingBox bounds = objects[0]->GetBounds();
+		for (GameObject* object : objects) {
+			BoundingBox objectBounds = object->GetBounds();
+			bounds.min.x = std::min(bounds.min.x, objectBounds.min.x);
+			bounds.min.y = std::min(bounds.min.y, objectBounds.min.y);
+			bounds.min.z = std::min(bounds.min.z, objectBounds.min.z);
+			bounds.max.x = std::max(bounds.max.x, objectBounds.max.x);
+			bounds.max.y = std::max(bounds.max.y, objectBounds.max.y);
+			bounds.max.z = std::max(bounds.max.z, objectBounds.max.z);
+		}
+		bounds.min += Vector3(.01f, .01f, .01f);
+		bounds.max -= Vector3(.01f, .01f, .01f);
+		return bounds;
+	}
+
+	void AddObject(T* object) {
+		if (object == nullptr) {
+			return;
+		}
+
+		BoundingBox objBounds = object->GetBounds();
+		CellCoord min = WorldToCell(objBounds.min + Vector3(.01f, .01f, .01f));
+		CellCoord max = WorldToCell(objBounds.max - Vector3(.01f, .01f, .01f));
+
+		if (min.x < 0 || min.y < 0 || min.z < 0 || max.x > size.x - 1 || max.y > size.y - 1 || max.z > size.z - 1)
+			cells[0].objects.push_back(object);
+
+		min.x = std::max(min.x, 0);
+		min.y = std::max(min.y, 0);
+		min.z = std::max(min.z, 0);
+
+		max.x = std::min(max.x, size.x - 1);
+		max.y = std::min(max.y, size.y - 1);
+		max.z = std::min(max.z, size.z - 1);
+
+		for (int x = min.x; x <= max.x; x++) {
+			for (int y = min.y; y <= max.y; y++) {
+				for (int z = min.z; z <= max.z; z++) {
+					GetCell(CellCoord{ x,y,z }).objects.push_back(object);
+				}
+			}
+		}
+
+		totalObjects++;
+	}
+	void RemoveObject(T* object) {
+		if (object == nullptr) {
+			return;
+		}
+
+		BoundingBox objBounds = object->GetBounds();
+		CellCoord min = WorldToCell(objBounds.min + Vector3(.01f, .01f, .01f));
+		CellCoord max = WorldToCell(objBounds.max - Vector3(.01f, .01f, .01f));
+
+		auto& cellObj = cells[0].objects;
+		if (min.x < 0 || min.y < 0 || min.z < 0 || max.x > size.x - 1 || max.y > size.y - 1 || max.z > size.z - 1) {
+			for (size_t i = 0; i < cellObj.size(); i++) {
+				if (cellObj[i] == object) {
+					cellObj[i] = cellObj.back();
+					cellObj.pop_back();
+					break;
+				}
+			}
+		}
+
+		min.x = std::max(min.x, 0);
+		min.y = std::max(min.y, 0);
+		min.z = std::max(min.z, 0);
+
+		max.x = std::min(max.x, size.x - 1);
+		max.y = std::min(max.y, size.y - 1);
+		max.z = std::min(max.z, size.z - 1);
+
+		for (int x = min.x; x <= max.x; x++) {
+			for (int y = min.y; y <= max.y; y++) {
+				for (int z = min.z; z <= max.z; z++) {
+					auto& cellObj = GetCell(CellCoord{ x,y,z }).objects;
+					for (size_t i = 0; i < cellObj.size(); i++) {
+						if (cellObj[i] == object) {
+							cellObj[i] = cellObj.back();
+							cellObj.pop_back();
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		totalObjects--;
+	}
+
+	void MoveObject(T* object, Vector3 transform) {
+		RemoveObject(object);
+		object->position += transform;
+		AddObject(object);
+	}
+
+	const std::vector<GridCell<T>>& GetCells() const {
+		return cells;
+	}
+	GridCell<T>& GetCell(Vector3 position) {
+		return GetCell(WorldToCell(position));
+	}
+	GridCell<T>& GetCell(CellCoord cellCoord) {
+		if (cellCoord.x < 0 || cellCoord.x >= size.x ||
+			cellCoord.y < 0 || cellCoord.y >= size.y ||
+			cellCoord.z < 0 || cellCoord.z >= size.z)
+			return cells[0];
+
+		return cells[static_cast<size_t>(cellCoord.x) +
+			static_cast<size_t>(cellCoord.y) * size.x +
+			static_cast<size_t>(cellCoord.z) * size.x * size.y + 1];
+	}
+
+	CellCoord WorldToCell(Vector3 cellPos) const {
+		return { static_cast<int>(std::floor((cellPos.x - position.x) / cellSize.x)),
+			static_cast<int>(std::floor((cellPos.y - position.y) / cellSize.y)),
+			static_cast<int>(std::floor((cellPos.z - position.z) / cellSize.z)) };
+	}
+	Vector3 CellToWorld(CellCoord cellCoord) const {
+		return { position.x + (cellCoord.x * cellSize.x) + (cellSize.x / 2.0f),
+			position.y + (cellCoord.y * cellSize.y) + (cellSize.y / 2.0f),
+			position.z + (cellCoord.z * cellSize.z) + (cellSize.z / 2.0f)
+		};
+	}
+
+	int getTotalObjects() {
+		return totalObjects;
+	}
+private:
+	void GenGrid() {
+		cells.clear();
+		cells.resize(static_cast<size_t>(size.x) * size.y * size.z + 1);
+		for (int x = 0; x < size.x; x++) {
+			for (int y = 0; y < size.y; y++) {
+				for (int z = 0; z < size.z; z++) {
+					CellCoord coord = CellCoord{ x,y,z };
+					GridCell<T>& cell = GetCell(coord);
+					cell.pos = coord;
+					cell.bounds.min = { position.x + cellSize.x * x,
+						position.y + cellSize.y * y,
+						position.z + cellSize.z * z };
+					cell.bounds.max = { position.x + cellSize.x * (x + 1),
+						position.y + cellSize.y * (y + 1),
+						position.z + cellSize.z * (z + 1) };
+				}
+			}
+		}
+	}
+
+	int padding = 1;
+
+	int totalObjects = 0;
+
+	Vector3 position{ 0.f,0.f,0.f };
+	CellCoord size{ 0,0,0 };
+	Vector3 cellSize{ 1, 1, 1 };
+
+	std::vector<GridCell<T>> cells; // 1st cell is objects outside of grid
+};
+
+
+=== config.txt ===
+# Game
+max_fps=120
+
+# Enemies
+spawn_interval=1.5
+spawn_radius=30.0
+min_enemy_speed=5.0
+max_enemy_speed=15.0
+max_enemies=10
+
+# Debug
+log_show_time=5.0

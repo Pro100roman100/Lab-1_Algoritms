@@ -12,22 +12,31 @@ enum class ObjectType {
 
 class Collider {
 public:
-    BoundingBox maxBounds = {};
+    virtual BoundingBox GetBounds(const Quaternion& rotation) = 0;
+
     float mass = 1.f;
     float inverseMass = 1.f;
     Matrix inertiaTensor = {};
 
     virtual ~Collider() = default;
+protected:
+    BoundingBox bounds = {};
 };
 
 struct BoxCollider : Collider {
     Vector3 size = {};
 
-    BoxCollider(Vector3 size = {1.f, 1.f, 1.f}, float mass = 1.0f);
+    BoundingBox GetBounds(const Quaternion& rotation) override;
+    BoxCollider(Vector3 size = { 1.f, 1.f, 1.f }, float mass = 1.0f);
+
+private:
+    Quaternion lastRot = { -1 };
 };
+
 struct SphereCollider : Collider {
     float radius = 0.0f;
 
+    BoundingBox GetBounds(const Quaternion& rotation) override;
     SphereCollider(float radius = 1.0f, float mass = 1.0f);
 };
 

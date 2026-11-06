@@ -21,7 +21,7 @@ public:
 
 	void AddObject(PhysicsObject* object);
 	void RemoveObject(PhysicsObject* object);
-    std::vector<PhysicsObject*>& const GetObjects();
+    const std::vector<PhysicsObject*>&  GetObjects();
 
     std::vector<PhysicsObject*> CheckIntersection(const BoundingBox& bounds) const;
 
