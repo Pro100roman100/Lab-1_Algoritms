@@ -5,7 +5,7 @@ std::unique_ptr<Texture2D> Skittle::texture;
 
 
 Skittle::Skittle(Vector3 position)
-    : PhysicsObject(ObjectType::_dynamic, new BoxCollider({0.8f, 2.f, 0.8f}, 2.f), 0.85f) {
+    : PhysicsObject(ObjectType::_dynamic, new BoxCollider({0.8f, 2.f, 0.8f}, 1.f), 0.95f, 0.5f) {
     this->position = position;
     if (texture == nullptr)
         texture = std::make_unique<Texture2D>(LoadTexture("resources/skittle.png"));
@@ -17,11 +17,4 @@ Skittle::Skittle(Vector3 position)
 
 void Skittle::Draw() const {
     DrawModel(*model, position, 1, WHITE);
-}
-
-BoundingBox Skittle::GetBounds() const {
-    return {
-        position - Vector3{ 0.45f, 1.f, 0.45f },
-        position + Vector3{ 0.45f, 1.f, 0.45f }
-    };
 }

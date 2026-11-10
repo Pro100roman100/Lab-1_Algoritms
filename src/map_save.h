@@ -15,7 +15,9 @@ enum Objects {
 	TargetPos,
 	CameraPos,
 	DynamicSpherePos,
-	SkittlePos
+	SkittlePos,
+	BowlingTargetPos,
+	BowlingTargetBigPos
 };
 
 class MapSave {

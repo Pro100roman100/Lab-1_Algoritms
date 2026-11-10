@@ -6,7 +6,7 @@
 class DynamicSphere : public DrawableObject, public PhysicsObject {
 public:
 	DynamicSphere(Vector3 position, float radius = 0.5f, float mass = 5.0f)
-		: PhysicsObject(ObjectType::_dynamic, new SphereCollider(radius, mass), 0.95f) {
+		: PhysicsObject(ObjectType::_dynamic, new SphereCollider(radius, mass), 0.2f) {
 		this->position = position;
 		if (texture == nullptr)
 			texture = std::make_unique<Texture2D>(LoadTexture("resources/bowling.png"));

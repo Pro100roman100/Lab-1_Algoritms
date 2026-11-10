@@ -301,6 +301,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\bowling_target.h" />
+    <ClInclude Include="src\dynamicBVH.h" />
+    <ClInclude Include="src\BVH.h" />
     <ClInclude Include="src\dynamic_sphere.h" />
     <ClInclude Include="src\game_object.h" />
     <ClInclude Include="src\physics_object.h" />
@@ -325,9 +328,11 @@
     <ClInclude Include="src\uniform_grid.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\BVH.cpp" />
     <ClCompile Include="src\camera_marker.cpp" />
     <ClCompile Include="src\config_loader.cpp" />
     <ClCompile Include="src\console.cpp" />
+    <ClCompile Include="src\dynamicBVH.cpp" />
     <ClCompile Include="src\editor.cpp" />
     <ClCompile Include="src\editor_camera.cpp" />
     <ClCompile Include="src\enemy.cpp" />
@@ -346,6 +351,7 @@
     <ClCompile Include="src\target.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="empty.map" />
     <None Include="src\icon.ico" />
     <None Include="test.map" />
   </ItemGroup>

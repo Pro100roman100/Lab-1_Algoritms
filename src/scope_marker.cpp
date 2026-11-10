@@ -7,12 +7,16 @@
 
 #include "scope_marker.h"
 
+int ScopeMarker::currentDepth = 0;
+
 std::vector<MarkerData> ScopeMarker::markers;
 std::vector<MarkerData> ScopeMarker::averageMarkers;
 
 ScopeMarker::ScopeMarker(std::string name, std::string category) {
 	data.name = name;
 	data.category = category;
+	data.depth = currentDepth;
+	currentDepth++;
 
 	LARGE_INTEGER timerFrequency;
 	LARGE_INTEGER timerStart;
@@ -24,6 +28,8 @@ ScopeMarker::ScopeMarker(std::string name, std::string category) {
 }
 
 ScopeMarker::~ScopeMarker() {
+	currentDepth--;
+
 	LARGE_INTEGER currentTime;
 	QueryPerformanceCounter(&currentTime);
 	data.duration = static_cast<double>(currentTime.QuadPart - startTime) * 1000.0 / frequency;
@@ -40,7 +46,7 @@ void ScopeMarker::BeginFrame() {
 		if (existing == averageMarkers.end())
 			frameAverages.push_back(marker);
 		else
-			frameAverages.push_back({ marker.name, marker.category, (marker.duration + existing->duration) / 2 });
+			frameAverages.push_back({ marker.name, marker.category, marker.depth, (marker.duration + existing->duration) / 2 });
 	}
 
 	averageMarkers.swap(frameAverages);
@@ -58,8 +64,8 @@ void ScopeMarker::DrawMarkers() {
 			previousCategory = marker.category;
 			y += fontSize + 5;
 		}
-		DrawText(("	" + marker.name).c_str(), 5, y, fontSize, BLACK);
-		DrawText(std::format("{:.2f}ms", marker.duration).c_str(), 180, y, fontSize, BLACK);
+		DrawText(("	" + marker.name).c_str(), 5 + marker.depth * 10, y, fontSize, BLACK);
+		DrawText(std::format("{:.2f}ms", marker.duration).c_str(), 220, y, fontSize, BLACK);
 
 		y += fontSize;
 	}

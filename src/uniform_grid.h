@@ -49,6 +49,9 @@ public:
 		GenGrid();
 	}
 	BoundingBox CalculateBoundingBox(std::vector<GameObject*>& objects) {
+		if (objects.empty())
+			return { Vector3{0,0,0}, Vector3{0,0,0} };
+
 		BoundingBox bounds = objects[0]->GetBounds();
 		for (GameObject* object : objects) {
 			BoundingBox objectBounds = object->GetBounds();

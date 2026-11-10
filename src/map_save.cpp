@@ -1,6 +1,7 @@
 #include "map_save.h"
 #include "dynamic_sphere.h"
 #include "skittle.h"
+#include "bowling_target.h"
 
 #include <sstream>
 #include <vector>
@@ -30,7 +31,7 @@ bool MapSave::LoadFromFile(std::string filename) {
 		std::string extra;
 		if (!(record >> type >> position.x >> position.y >> position.z) ||
 			record >> extra ||
-			type < Objects::Cube1x1Pos || type > Objects::SkittlePos) {
+			type < Objects::Cube1x1Pos || type > Objects::BowlingTargetBigPos) {
 			LOG("Invalid record in map file " + filename + ".map");
 			return false;
 		}
@@ -57,6 +58,18 @@ bool MapSave::LoadFromFile(std::string filename) {
 				targetLoaded = true;
 			}
 			break;
+		case Objects::BowlingTargetPos:
+			if (!targetLoaded) {
+				parcedObjects.push_back(new BowlingTarget(object.position));
+				targetLoaded = true;
+			}
+			break;
+		case Objects::BowlingTargetBigPos:
+				if (!targetLoaded) {
+					parcedObjects.push_back(new BowlingTarget(object.position, 3.f));
+					targetLoaded = true;
+				}
+				break;
 		case Objects::DynamicSpherePos:
 			parcedObjects.push_back(new DynamicSphere(object.position));
 			break;
@@ -73,6 +86,7 @@ bool MapSave::LoadFromFile(std::string filename) {
 		}
 	}
 	world.AddSceneObjects(parcedObjects);
+	GameWorld::GetInstance().PhysicsUpdate();
 	MapSave::SaveToFile("temp");
 
 	LOG("Map loaded from " + filename + ".map");
@@ -97,6 +111,17 @@ bool MapSave::SaveToFile(std::string filename) {
 				mapFile << Objects::Cube10x10Pos << " " << cube->position.x << " " << cube->position.y << " " << cube->position.z << std::endl;
 			else
 				mapFile << Objects::Cube1x1Pos << " " << cube->position.x << " " << cube->position.y << " " << cube->position.z << std::endl;
+		}
+		else if (auto target = dynamic_cast<BowlingTarget*>(object)) {
+			if (targetSaved) {
+				LOG("Duplicate targets, only one is saved");
+				continue;
+			}
+			if (abs(target->size - 1.0f) < 0.001f)
+				mapFile << Objects::BowlingTargetPos << " " << target->position.x << " " << target->position.y << " " << target->position.z << std::endl;
+			else
+				mapFile << Objects::BowlingTargetBigPos << " " << target->position.x << " " << target->position.y << " " << target->position.z << std::endl;
+			targetSaved = true;
 		}
 		else if (auto target = dynamic_cast<Target*>(object)) {
 			if (targetSaved) {

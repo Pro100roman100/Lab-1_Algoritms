@@ -7,7 +7,7 @@ GameWorld::GameWorld() = default;
 
 void GameWorld::InitWorld() {
     drawableObjects.GenerateGrid(Vector3(-50.f, -10.f, -50.f), CellCoord(10, 5, 10), Vector3(10.f, 5.f, 10.f));
-    AddObject(new EnemySpawner());
+    physicsWorld.UpdateBVH();
 }
 
 void GameWorld::ClearWorld() {
@@ -41,8 +41,6 @@ void GameWorld::DrawWorld(Camera3D camera, bool showEditorObjects) {
     for (int i = 0; i < cells.size(); i++) {
         auto& cell = cells[i];
         if (!cell.objects.empty() && (i == 0 || frustum.IsVisible(cell.bounds))) {
-            if (showEditorObjects)
-                DrawCubeWiresV((cell.bounds.max + cell.bounds.min) * 0.5f, cell.bounds.max - cell.bounds.min, GRAY);
             for (DrawableObject* object : cell.objects) {
                 if (!showEditorObjects && dynamic_cast<CameraMarker*>(object) != nullptr) {
                     continue;
@@ -55,6 +53,10 @@ void GameWorld::DrawWorld(Camera3D camera, bool showEditorObjects) {
             }
         }
     }
+
+    //if (showEditorObjects)
+    //    physicsWorld.DebugDraw();
+
     invisibleObjects = drawableObjects.getTotalObjects() - visibleObjects;
 
     EndMode3D();
@@ -63,6 +65,11 @@ void GameWorld::DrawWorld(Camera3D camera, bool showEditorObjects) {
         5, 5, 18, BLACK);
     DrawText(("Invisible objects: " + std::to_string(invisibleObjects)).c_str(),
         200, 5, 18, BLACK);
+}
+
+void GameWorld::PhysicsUpdate()
+{
+    physicsWorld.UpdateBVH();
 }
 
 void GameWorld::UpdateWorld(float deltaTime) {
@@ -99,9 +106,11 @@ void GameWorld::AddObject(GameObject* object) {
 }
 
 void GameWorld::AddSceneObjects(std::vector<GameObject*>& objects) {
+    if (objects.empty())
+        return;
+
     BoundingBox bounds = drawableObjects.CalculateBoundingBox(objects);
     drawableObjects.GenerateGrid(bounds, { 10.f,10.f,10.f });
-    physicsWorld.GenerateGrid(bounds, { 2.5f,2.5f,2.5f });
     for (auto object : objects) {
         AddObject(object);
     }
@@ -146,48 +155,24 @@ std::vector<GameObject*>& const GameWorld::GetObjects()
     return objects;
 }
 
-void GameWorld::Raycast(Ray ray, RayCollision& output, DrawableObject*& object) {
+void GameWorld::Raycast(Ray ray, RayCollision& output, GameObject*& object) {
     SCOPE_MARKER(Raycast, Update);
-    output.hit = false;
-    output.distance = INFINITY;
-    object = nullptr;
-
-    std::unordered_set<DrawableObject*> renderedObjects;
-
-    RayCollision newCollision{};
-    bool cellHit;
-    auto& cells = drawableObjects.GetCells();
-    for (int i = 0; i < cells.size(); i++) {
-        auto& cell = cells[i];
-
-        if (!cell.objects.empty()) {
-            cellHit = true;
-            if (i != 0) {
-                newCollision = GetRayCollisionBox(ray, cell.bounds);
-                cellHit = newCollision.hit && newCollision.distance < output.distance;
-            }
-            if (cellHit) {
-                for (auto drawObj : cell.objects) {
-                    if (renderedObjects.contains(drawObj))
-                        continue;
-                    renderedObjects.insert(drawObj);
-                    newCollision = GetRayCollisionBox(ray, drawObj->GetBounds());
-                    if (newCollision.hit && newCollision.distance < output.distance) {
-                        output = newCollision;
-                        object = drawObj;
-                    }
-                }
-            }
-        }
-    }
+    RaycastHit hit;
+    output.hit = physicsWorld.Raycast(ray, hit, 100.f);
+    output.distance = hit.distance;
+    output.normal = hit.normal;
+    output.point = hit.point;
+    object = hit.object;
 }
 
-void GameWorld::UpdatePosition(DrawableObject* object, Vector3 transform) {
-    if (auto* physical = dynamic_cast<PhysicsObject*>(object)) {
-        drawableObjects.RemoveObject(object);
-        physicsWorld.MoveObject(physical, transform);
-        drawableObjects.AddObject(object);
+void GameWorld::MoveObject(GameObject* object, Vector3 transform) {
+    if (auto* drawable = dynamic_cast<DrawableObject*>(object)) {
+        if (auto* physical = dynamic_cast<PhysicsObject*>(object)) {
+            drawableObjects.RemoveObject(drawable);
+            physicsWorld.MoveObject(physical, transform);
+            drawableObjects.AddObject(drawable);
+        }
+        else
+            drawableObjects.MoveObject(drawable, transform);
     }
-    else
-        drawableObjects.MoveObject(object, transform);
 }
