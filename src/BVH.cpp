@@ -29,6 +29,7 @@ void BVH::RemoveObject(PhysicsObject* object) {
         if (objects[i] == object) {
             objects[i] = objects.back();
             objects.pop_back();
+            break;
         }
     }
 }
@@ -166,5 +167,29 @@ void BVH::QueryRecursive(const BVHNode* node, const BoundingBox& bounds, std::ve
     else {
         QueryRecursive(node->left.get(), bounds, hits);
         QueryRecursive(node->right.get(), bounds, hits);
+    }
+}
+
+std::vector<PhysicsObject*> BVH::Raycast(Ray ray) const {
+    std::vector<PhysicsObject*> hits;
+    RaycastRecursive(root.get(), ray, hits);
+    return hits;
+}
+void BVH::RaycastRecursive(const BVHNode* node, Ray ray, std::vector<PhysicsObject*>& hits) const {
+    if (!node) 
+        return;
+
+    RayCollision boxCollision = GetRayCollisionBox(ray, node->bounds);
+
+    if (!boxCollision.hit) {
+        return;
+    }
+
+    if (node->IsLeaf()) {
+        hits.push_back(node->object);
+    }
+    else {
+        RaycastRecursive(node->left.get(), ray, hits);
+        RaycastRecursive(node->right.get(), ray, hits);
     }
 }

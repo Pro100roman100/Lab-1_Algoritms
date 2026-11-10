@@ -29,6 +29,7 @@ public:
 	void InitWorld();
 	void ClearWorld();
 
+	void PhysicsUpdate();
 	void UpdateWorld(float deltaTime);
 	void DrawWorld(Camera3D camera, bool showEditorObjects = false);
 
@@ -37,7 +38,7 @@ public:
 	void RemoveObject(GameObject* object);
 
 	std::vector<GameObject*>& GetObjects();
-	void Raycast(Ray ray, RayCollision& output, DrawableObject*& object);
+	void Raycast(Ray ray, RayCollision& output, GameObject*& object);
 
 	void MoveObject(GameObject* object, Vector3 transform);
 

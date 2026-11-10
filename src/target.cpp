@@ -1,14 +1,19 @@
 #include "target.h"
 #include "raymath.h"
 
+#include "game_world.h"
+#include "enemy_spawner.h"
+
 Target* Target::currentTarget = nullptr;
 
 Target::Target(Vector3 position, bool setMain) 
     : PhysicsObject(ObjectType::_static, new BoxCollider({1.f, 2.f, 1.f}), 0.5f) {
     this->position = position;
     color = GREEN;
-    if(setMain)
-        currentTarget = this;
+    if (setMain) {
+        GameWorld::GetInstance().AddObject(new EnemySpawner());
+    }
+    currentTarget = this;
 }
 
 Target::~Target() {

@@ -358,3 +358,29 @@ void DynamicBVH::Draw() const {
         }
     }
 }
+
+std::vector<PhysicsObject*> DynamicBVH::Raycast(Ray ray) const {
+    std::vector<PhysicsObject*> hits;
+    RaycastRecursive(root, ray, hits);
+    return hits;
+}
+
+void DynamicBVH::RaycastRecursive(int nodeIndex, Ray ray, std::vector<PhysicsObject*>& hits) const {
+    if (nodeIndex == BVH_NULL_NODE)
+        return;
+
+    const DynamicBVHNode& node = nodes[nodeIndex];
+    RayCollision boxCollision = GetRayCollisionBox(ray, node.bounds);
+
+    if (!boxCollision.hit) {
+        return;
+    }
+
+    if (node.IsLeaf()) {
+        hits.push_back(node.object);
+    }
+    else {
+        RaycastRecursive(node.left, ray, hits);
+        RaycastRecursive(node.right, ray, hits);
+    }
+}

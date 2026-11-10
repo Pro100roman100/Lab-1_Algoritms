@@ -3,26 +3,36 @@
 #include <cmath>
 #include "game_world.h"
 
+void PhysicsWorld::UpdateBVH() {
+    staticObjects.Update();
+    dynamicObjects.Update();
+}
+
 void PhysicsWorld::Update(float deltaTime) {
     SCOPE_MARKER(Update, Physics);
-    
+
     if (isUpdated) {
         staticObjects.Update();
         isUpdated = false;
     }
 
-    for (auto object : dynamicObjects) {
-        if (!object || !object->active) continue;
+    for (auto object : dynamicObjects.GetObjects()) {
+        if (!object || !object->active) 
+            continue;
 
         auto& properties = object->GetProperties();
 
-        object->AddForce(Vector3Scale(Vector3{ 0.f, -9.8f, 0.f }, properties.collider->mass * deltaTime));
-        object->AddForce(Vector3Scale(properties.velocity, -0.05f * deltaTime));
-        object->ApplyAngularDamping(0.05f);
+        object->AddForce(properties.collider->mass * Vector3{ 0.f, -9.8f, 0.f });
+        object->AddForce(properties.drag * properties.velocity * -properties.collider->mass);
     }
 
     ApplyForces(deltaTime);
-    SolveCollisions();
+    dynamicObjects.Update();
+    CheckCollisions();
+}
+
+void PhysicsWorld::DebugDraw() {
+    staticObjects.Draw();
 }
 
 void PhysicsWorld::AddObject(PhysicsObject* object) {
@@ -33,7 +43,7 @@ void PhysicsWorld::AddObject(PhysicsObject* object) {
         staticObjects.AddObject(object);
     }
     else {
-        dynamicObjects.push_back(object);
+        dynamicObjects.AddObject(object);
     }
 }
 
@@ -66,134 +76,169 @@ void PhysicsWorld::RemoveObject(PhysicsObject* object) {
         staticObjects.RemoveObject(object);
     }
     else {
-        auto it = std::find(dynamicObjects.begin(), dynamicObjects.end(), object);
-        if (it != dynamicObjects.end()) {
-            *it = dynamicObjects.back();
-            dynamicObjects.pop_back();
-        }
+        dynamicObjects.RemoveObject(object);
     }
 }
 
 void PhysicsWorld::ApplyForces(float deltaTime) {
     SCOPE_MARKER(ApplyForces, Physics);
-    const float step = std::min(deltaTime, 0.02f);
+    deltaTime = std::min(deltaTime, 0.02f);
 
-    for (PhysicsObject* object : dynamicObjects) {
-        if (object == nullptr || !object->active) continue;
+    for (PhysicsObject* object : dynamicObjects.GetObjects()) {
+        if (object == nullptr || !object->active) 
+            continue;
 
-        const PhysicsProperty properties = object->GetProperties();
-        if (properties.type != ObjectType::_dynamic || properties.collider == nullptr ||
-            properties.collider->inverseMass <= 0.0f) {
+        const PhysicsProperty& properties = object->GetProperties();
+        if (properties.type != ObjectType::_dynamic || properties.collider == nullptr || properties.collider->inverseMass <= 0.0f) {
             continue;
         }
 
-        const Vector3 translation = Vector3Scale(properties.velocity, step);
+        object->ApplyAcceleration(deltaTime);
+        const Vector3 translation = Vector3Scale(properties.velocity, deltaTime);
         if (Vector3LengthSqr(translation) > 0.0f) {
             GameWorld::GetInstance().MoveObject(object, translation);
-        }
-
-        const Vector3 angularVelocity = {
-            properties.rotationVelocity.x,
-            properties.rotationVelocity.y,
-            properties.rotationVelocity.z
-        };
-        const Vector3 localAngularVelocity = Vector3RotateByQuaternion(
-            angularVelocity,
-            QuaternionInvert(object->rotation));
-        const float angularSpeed = Vector3Length(localAngularVelocity);
-
-        if (angularSpeed > 0.000001f) {
-            const Quaternion deltaRotation = QuaternionFromAxisAngle(
-                Vector3Scale(localAngularVelocity, 1.0f / angularSpeed),
-                angularSpeed * step);
-            object->RotateObject(deltaRotation);
         }
     }
 }
 
-void PhysicsWorld::SolveCollisions() {
-    SCOPE_MARKER(SolveCollisions, Physics);
-    std::vector<CollisionResult> contacts;
-    std::set<CollisionPair> currentCollisions;
+void PhysicsWorld::CheckCollisions() {
+    SCOPE_MARKER(CheckCollisions, Physics);
 
-    // 1. Широка фаза
-    {
-        SCOPE_MARKER(BroadPhase, Physics);
-        for (size_t i = 0; i < dynamicObjects.size(); ++i) {
-            PhysicsObject* objA = dynamicObjects[i];
-            if (!objA || !objA->active) continue;
+    broadPhasePairs.clear();
+    currentCollisions.clear();
+    collisions.clear();
 
-            // Динамічні vs Статичні
-            std::vector<PhysicsObject*> staticHits = staticObjects.CheckIntersection(objA->GetBounds());
-            for (PhysicsObject* objB : staticHits) {
-                CollisionResult result;
-                if (CheckCollision(objA, objB, result)) {
-                    contacts.push_back(result);
+    BroadPhase();
+    NarrowPhase();
+    CollisionEvents();
+    SolveCollisions();
+}
 
-                    CollisionPair pair = (objA < objB) ? std::make_pair(objA, objB) : std::make_pair(objB, objA);
-                    currentCollisions.insert(pair);
+void PhysicsWorld::BroadPhase() {
+    SCOPE_MARKER(BroadPhase, Physics);
 
-                    if (previousCollisions.find(pair) == previousCollisions.end()) {
-                        objA->OnCollisionEnter(objB, result);
-                        objB->OnCollisionEnter(objA, result);
-                    }
-                    else {
-                        objA->OnCollisionStay(objB, result);
-                        objB->OnCollisionStay(objA, result);
-                    }
-                }
-            }
+    const auto& objs = dynamicObjects.GetObjects();
+    for (size_t i = 0; i < objs.size(); ++i) {
+        PhysicsObject* objA = objs[i];
 
-            // Динамічні vs Динамічні
-            for (size_t j = i + 1; j < dynamicObjects.size(); ++j) {
-                PhysicsObject* objB = dynamicObjects[j];
-                if (!objB || !objB->active) continue;
-                if (CheckCollisionBoxes(objA->GetBounds(), objB->GetBounds())) {
-                    CollisionResult result;
-                    if (CheckCollision(objA, objB, result)) {
-                        contacts.push_back(result);
+        if (!objA || !objA->active)
+            continue;
 
-                        CollisionPair pair = (objA < objB) ? std::make_pair(objA, objB) : std::make_pair(objB, objA);
-                        currentCollisions.insert(pair);
+        const BoundingBox boundsA = objA->GetBounds();
 
-                        if (previousCollisions.find(pair) == previousCollisions.end()) {
-                            objA->OnCollisionEnter(objB, result);
-                            objB->OnCollisionEnter(objA, result);
-                        }
-                        else {
-                            objA->OnCollisionStay(objB, result);
-                            objB->OnCollisionStay(objA, result);
-                        }
-                    }
-                }
-            }
+        // Dynamic vs Static
+        for (PhysicsObject* objB : staticObjects.CheckIntersection(boundsA)) {
+            if (!objB || !objB->active || objA == objB)
+                continue;
+            broadPhasePairs.emplace_back(objA, objB);
+        }
+
+        // Dynamic vs Dynamic
+        for (PhysicsObject* objB : dynamicObjects.CheckIntersection(boundsA)) {
+            if (!objB || !objB->active || objA >= objB)
+                continue;
+            broadPhasePairs.emplace_back(objA, objB);
         }
     }
-    
+}
 
+void PhysicsWorld::NarrowPhase() {
+    SCOPE_MARKER(NarrowPhase, Physics);
+
+    for (const auto& pair : broadPhasePairs) {
+        CollisionInfo collision;
+
+        if (!CheckCollision(pair.first, pair.second, collision))
+            continue;
+
+        collisions.push_back(collision);
+        currentCollisions.insert(pair);
+    }
+}
+
+void PhysicsWorld::CollisionEvents() {
+    SCOPE_MARKER(CollisionEvents, Physics);
+
+    // Enter / Stay
+    for (const CollisionInfo& collision : collisions) {
+        PhysicsObject* objA = collision.a;
+        PhysicsObject* objB = collision.b;
+
+        CollisionPair pair = std::make_pair(objA, objB);
+
+        if (previousCollisions.contains(pair)) {
+            objA->OnCollisionStay(objB, collision);
+            objB->OnCollisionStay(objA, collision);
+        }
+        else {
+            objA->OnCollisionEnter(objB, collision);
+            objB->OnCollisionEnter(objA, collision);
+        }
+    }
+
+    // Exit
     for (const auto& pair : previousCollisions) {
-        if (currentCollisions.find(pair) == currentCollisions.end()) {
+        if (!currentCollisions.contains(pair)) {
             pair.first->OnCollisionExit(pair.second);
             pair.second->OnCollisionExit(pair.first);
         }
     }
 
-    previousCollisions = currentCollisions;
+    previousCollisions = std::move(currentCollisions);
+}
 
-    {
-        SCOPE_MARKER(NarrowPhase, Physics);
-        const int solverIterations = 1;
-        for (int i = 0; i < solverIterations; ++i) {
-            for (auto& contact : contacts) {
-                ResolveContact(contact);
-            }
-        }
+void PhysicsWorld::SolveCollisions() {
+    SCOPE_MARKER(SolveCollisions, Physics);
+
+    for (const auto& collision : collisions) {
+        if (!collision.a || !collision.b)
+            continue;
+
+        const PhysicsProperty& propA = collision.a->GetProperties();
+        const PhysicsProperty& propB = collision.b->GetProperties();
+
+        const float invA = propA.collider->inverseMass;
+        const float invB = propB.collider->inverseMass;
+        const float totalInvMass = invA + invB;
+        if (totalInvMass <= 0.0f)
+            continue;
+
+        const Vector3 normal = collision.point.normal;
+
+        const Vector3 relativeVelocity = propB.velocity - propA.velocity;
+        const float velAlongNormal = Vector3DotProduct(relativeVelocity, normal);
+
+        if (velAlongNormal >= 0.0f)
+            continue;
+
+        float elasticity = propA.elasticity * propB.elasticity;
+        if (-velAlongNormal < 1e-5f)
+            elasticity = 0.0f;
+
+        const float j = -(1.0f + elasticity) * velAlongNormal / totalInvMass;
+        const Vector3 impulse = normal * j;
+
+        collision.a->AddImpulse(impulse * -1.0f);
+        collision.b->AddImpulse(impulse);
+
+        const float depth = std::max(collision.point.penetration, 0.0f);
+        if (depth <= 0.0f)
+            continue;
+
+        const Vector3 correction = collision.point.normal * depth / totalInvMass;
+
+        if (invA > 0.0f)
+            GameWorld::GetInstance().MoveObject(collision.a, correction * -invA);
+        if (invB > 0.0f)
+            GameWorld::GetInstance().MoveObject(collision.b, correction * invB);
     }
 }
 
-bool PhysicsWorld::CheckCollision(PhysicsObject* objA, PhysicsObject* objB, CollisionResult& result) {
+bool PhysicsWorld::CheckCollision(PhysicsObject* objA, PhysicsObject* objB, CollisionInfo& result) {
     Collider* colA = objA->GetProperties().collider;
     Collider* colB = objB->GetProperties().collider;
+    result.a = objA;
+    result.b = objB;
 
     BoxCollider* boxA = dynamic_cast<BoxCollider*>(colA);
     SphereCollider* sphereA = dynamic_cast<SphereCollider*>(colA);
@@ -201,194 +246,137 @@ bool PhysicsWorld::CheckCollision(PhysicsObject* objA, PhysicsObject* objB, Coll
     BoxCollider* boxB = dynamic_cast<BoxCollider*>(colB);
     SphereCollider* sphereB = dynamic_cast<SphereCollider*>(colB);
 
-    if (boxA && boxB) 
+    if (boxA && boxB)
         return BoxBoxCollision(objA, boxA, objB, boxB, result);
-    if (sphereA && sphereB) 
+    if (sphereA && sphereB)
         return SphereSphereCollision(objA, sphereA, objB, sphereB, result);
-    if (sphereA && boxB) 
+    if (sphereA && boxB)
         return SphereBoxCollision(objA, sphereA, objB, boxB, result);
     if (boxA && sphereB) {
         bool hit = SphereBoxCollision(objB, sphereB, objA, boxA, result);
         if (hit) {
-            result.normal = Vector3Scale(result.normal, -1.0f);
-            result.objA = objA;
-            result.objB = objB;
+            result.point.normal = result.point.normal * -1.f;
+            std::swap(result.point.localA, result.point.localB);
+            result.a = objA;
+            result.b = objB;
         }
         return hit;
     }
     return false;
 }
+bool PhysicsWorld::SphereSphereCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, SphereCollider* b, CollisionInfo& m) {
+    const float radii = a->radius + b->radius;
+    const Vector3 delta = objB->position - objA->position;
+    const float distSqr = Vector3LengthSqr(delta);
 
-bool PhysicsWorld::SphereSphereCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, SphereCollider* b, CollisionResult& result) {
-    Vector3 diff = Vector3Subtract(objB->position, objA->position);
-    float distSqr = Vector3LengthSqr(diff);
-    float radiusSum = a->radius + b->radius;
+    if (distSqr >= radii * radii)
+        return false;
 
-    if (distSqr >= radiusSum * radiusSum) return false;
+    const float dist = std::sqrt(distSqr);
+    const Vector3 normal = dist > 0 ? delta * (1.0f / dist) : Vector3{ 0.f, 1.f, 0.f };
 
-    float dist = sqrtf(distSqr);
-    result.objA = objA;
-    result.objB = objB;
-
-    if (dist == 0.0f) {
-        result.normal = { 0.0f, 1.0f, 0.0f };
-        result.penetration = a->radius;
-    }
-    else {
-        result.normal = Vector3Scale(diff, 1.0f / dist);
-        result.penetration = radiusSum - dist;
-    }
-    result.position = Vector3Add(objA->position, Vector3Scale(result.normal, a->radius));
+    m.AddContactPoint(normal * a->radius, normal * -b->radius, normal, radii - dist);
     return true;
 }
-bool PhysicsWorld::BoxBoxCollision(PhysicsObject* objA, BoxCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionResult& result) {
-    BoundingBox boxA = objA->GetBounds();
-    BoundingBox boxB = objB->GetBounds();
-
-    Vector3 centerA = { (boxA.min.x + boxA.max.x) * 0.5f, (boxA.min.y + boxA.max.y) * 0.5f, (boxA.min.z + boxA.max.z) * 0.5f };
-    Vector3 centerB = { (boxB.min.x + boxB.max.x) * 0.5f, (boxB.min.y + boxB.max.y) * 0.5f, (boxB.min.z + boxB.max.z) * 0.5f };
-
-    Vector3 halfExtentsA = { (boxA.max.x - boxA.min.x) * 0.5f, (boxA.max.y - boxA.min.y) * 0.5f, (boxA.max.z - boxA.min.z) * 0.5f };
-    Vector3 halfExtentsB = { (boxB.max.x - boxB.min.x) * 0.5f, (boxB.max.y - boxB.min.y) * 0.5f, (boxB.max.z - boxB.min.z) * 0.5f };
-
-    Vector3 distance = Vector3Subtract(centerB, centerA);
-
-    float overlapX = (halfExtentsA.x + halfExtentsB.x) - std::abs(distance.x);
-    if (overlapX <= 0.0f) return false;
-
-    float overlapY = (halfExtentsA.y + halfExtentsB.y) - std::abs(distance.y);
-    if (overlapY <= 0.0f) return false;
-
-    float overlapZ = (halfExtentsA.z + halfExtentsB.z) - std::abs(distance.z);
-    if (overlapZ <= 0.0f) return false;
-
-    result.objA = objA;
-    result.objB = objB;
-
-    if (overlapX < overlapY && overlapX < overlapZ) {
-        result.penetration = overlapX;
-        result.normal = (distance.x < 0) ? Vector3{ -1, 0, 0 } : Vector3{ 1, 0, 0 };
-    }
-    else if (overlapY < overlapZ) {
-        result.penetration = overlapY;
-        result.normal = (distance.y < 0) ? Vector3{ 0, -1, 0 } : Vector3{ 0, 1, 0 };
-    }
-    else {
-        result.penetration = overlapZ;
-        result.normal = (distance.z < 0) ? Vector3{ 0, 0, -1 } : Vector3{ 0, 0, 1 };
-    }
-
-    result.position = Vector3Add(centerA, Vector3Scale(result.normal, halfExtentsA.x));
-    return true;
-}
-bool PhysicsWorld::SphereBoxCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionResult& result) {
-    BoundingBox box = objB->GetBounds();
-    Vector3 spherePos = objA->position;
-
-    Vector3 closestPoint = {
-        std::clamp(spherePos.x, box.min.x, box.max.x),
-        std::clamp(spherePos.y, box.min.y, box.max.y),
-        std::clamp(spherePos.z, box.min.z, box.max.z)
+bool PhysicsWorld::BoxBoxCollision(PhysicsObject* objA, BoxCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionInfo& m) {
+    static const Vector3 faces[6] = {
+        Vector3{ 1.f, 0.f, 0.f }, Vector3{-1.f, 0.f, 0.f },
+        Vector3{ 0.f, 1.f, 0.f }, Vector3{ 0.f,-1.f, 0.f },
+        Vector3{ 0.f, 0.f, 1.f }, Vector3{ 0.f, 0.f,-1.f },
     };
 
-    Vector3 diff = Vector3Subtract(spherePos, closestPoint);
-    float distSqr = Vector3LengthSqr(diff);
+    const BoundingBox A = objA->GetBounds();
+    const BoundingBox B = objB->GetBounds();
 
-    if (distSqr > a->radius * a->radius) return false;
+    const float depths[6] = {
+        A.max.x - B.min.x,
+        B.max.x - A.min.x,
+        A.max.y - B.min.y,
+        B.max.y - A.min.y,
+        A.max.z - B.min.z,
+        B.max.z - A.min.z,
+    };
 
-    result.objA = objA;
-    result.objB = objB;
-    float dist = sqrtf(distSqr);
-
-    if (dist == 0.0f) {
-        result.normal = { 0, 1, 0 };
-        result.penetration = a->radius;
-        result.position = closestPoint;
+    float penetration = FLT_MAX;
+    int best = 0;
+    for (int i = 0; i < 6; ++i) {
+        if (depths[i] <= 0.0f)
+            return false;
+        if (depths[i] < penetration) {
+            penetration = depths[i];
+            best = i;
+        }
     }
-    else {
-        result.penetration = a->radius - dist;
-        result.normal = Vector3Scale(diff, -1.0f / dist);
-        result.position = closestPoint;
+
+    m.AddContactPoint(Vector3{}, Vector3{}, faces[best], penetration);
+    return true;
+}
+bool PhysicsWorld::SphereBoxCollision(PhysicsObject* objA, SphereCollider* a, PhysicsObject* objB, BoxCollider* b, CollisionInfo& m) {
+    const BoundingBox box = objB->GetBounds();
+    const Vector3 center = objA->position;
+
+    const Vector3 closest = Vector3Clamp(center, box.min, box.max);
+    const Vector3 diff = center - closest;
+    const float distSqr = Vector3LengthSqr(diff);
+
+    if (distSqr >= a->radius * a->radius)
+        return false;
+
+    if (distSqr > 0.f) {
+        const float dist = std::sqrt(distSqr);
+        const Vector3 normal = diff * (-1.0f / dist);
+        m.AddContactPoint(normal * a->radius, closest - objB->position, normal, a->radius - dist);
+        return true;
     }
+
+    const float d[6] = {
+        center.x - box.min.x, box.max.x - center.x,
+        center.y - box.min.y, box.max.y - center.y,
+        center.z - box.min.z, box.max.z - center.z,
+    };
+    static const Vector3 outward[6] = {
+        Vector3{-1.f, 0.f, 0.f}, Vector3{ 1.f, 0.f, 0.f},
+        Vector3{ 0.f,-1.f, 0.f}, Vector3{ 0.f, 1.f, 0.f},
+        Vector3{ 0.f, 0.f,-1.f}, Vector3{ 0.f, 0.f, 1.f},
+    };
+    int best = 0;
+    for (int i = 1; i < 6; ++i)
+        if (d[i] < d[best]) best = i;
+
+    const Vector3 normal = outward[best] * -1.0f;
+    m.AddContactPoint(normal * a->radius, Vector3{}, normal, a->radius + d[best]);
     return true;
 }
 
-void PhysicsWorld::ResolveContact(CollisionResult& contact) {
-    PhysicsObject* objA = contact.objA;
-    PhysicsObject* objB = contact.objB;
-
-    float invMassA = objA->GetProperties().collider->inverseMass;
-    float invMassB = objB->GetProperties().collider->inverseMass;
-
-    if (invMassA == 0.0f && invMassB == 0.0f) 
-        return;
-
-    Vector3 relVel = Vector3Subtract(objB->GetProperties().velocity, objA->GetProperties().velocity);
-    float velAlongNormal = Vector3DotProduct(relVel, contact.normal);
-
-    if (velAlongNormal > 0.0f) 
-        return;
-
-    float e = objA->GetProperties().elasticity * objB->GetProperties().elasticity;
-
-    float j = -(1.0f + e) * velAlongNormal;
-    j /= (invMassA + invMassB);
-
-    Vector3 impulse = Vector3Scale(contact.normal, j);
-
-    if (invMassA > 0.0f) 
-        objA->AddImpulse(Vector3Scale(impulse, -1.0f));
-    if (invMassB > 0.0f) 
-        objB->AddImpulse(impulse);
-
-    const float percent = 0.8f;
-    const float slop = 0.05f;
-    Vector3 correction = Vector3Scale(contact.normal, (std::max(contact.penetration - slop, 0.0f) / (invMassA + invMassB)) * percent);
-
-    if (invMassA > 0.0f) {
-        Vector3 moveA = Vector3Scale(correction, -invMassA);
-        GameWorld::GetInstance().MoveObject(objA, moveA);
-    }
-    if (invMassB > 0.0f) {
-        Vector3 moveB = Vector3Scale(correction, invMassB);
-        GameWorld::GetInstance().MoveObject(objB, moveB);
-    }
-}
 
 bool PhysicsWorld::Raycast(Ray ray, RaycastHit& hitResult, float maxDistance) {
     bool hit = false;
+    hitResult = RaycastHit{};
     hitResult.distance = maxDistance;
 
-    // Динамічні об'єкти
-    for (auto obj : dynamicObjects) {
-        if (!obj || !obj->active) continue;
-        RayCollision col = GetRayCollisionBox(ray, obj->GetBounds());
-        if (col.hit && col.distance < hitResult.distance) {
-            hitResult.distance = col.distance;
-            hitResult.normal = col.normal;
-            hitResult.point = col.point;
-            hitResult.object = obj;
+    for (auto obj : dynamicObjects.Raycast(ray)) {
+        if (RaycastObject(obj, ray, hitResult, maxDistance)) {
             hit = true;
         }
     }
 
-    // Статичні об'єкти
-    BoundingBox rayBox;
-    Vector3 endPos = Vector3Add(ray.position, Vector3Scale(ray.direction, maxDistance));
-    rayBox.min = { std::min(ray.position.x, endPos.x), std::min(ray.position.y, endPos.y), std::min(ray.position.z, endPos.z) };
-    rayBox.max = { std::max(ray.position.x, endPos.x), std::max(ray.position.y, endPos.y), std::max(ray.position.z, endPos.z) };
-
-    std::vector<PhysicsObject*> potentialStatics = staticObjects.CheckIntersection(rayBox);
-    for (auto obj : potentialStatics) {
-        RayCollision col = GetRayCollisionBox(ray, obj->GetBounds());
-        if (col.hit && col.distance < hitResult.distance) {
-            hitResult.distance = col.distance;
-            hitResult.normal = col.normal;
-            hitResult.point = col.point;
-            hitResult.object = obj;
+    for (auto obj : staticObjects.Raycast(ray)) {
+        if (RaycastObject(obj, ray, hitResult, maxDistance)) {
             hit = true;
         }
     }
 
     return hit;
+}
+
+bool PhysicsWorld::RaycastObject(PhysicsObject* object, Ray ray, RaycastHit& hitResult, float maxDistance) {
+    RayCollision col = object->Raycast(ray);
+    if (col.hit && col.distance < hitResult.distance && col.distance <= maxDistance) {
+        hitResult.distance = col.distance;
+        hitResult.normal = col.normal;
+        hitResult.point = col.point;
+        hitResult.object = object;
+        return true;
+    }
+    return false;
 }

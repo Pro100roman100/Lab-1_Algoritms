@@ -301,6 +301,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\bowling_target.h" />
     <ClInclude Include="src\dynamicBVH.h" />
     <ClInclude Include="src\BVH.h" />
     <ClInclude Include="src\dynamic_sphere.h" />
@@ -350,6 +351,7 @@
     <ClCompile Include="src\target.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="empty.map" />
     <None Include="src\icon.ico" />
     <None Include="test.map" />
   </ItemGroup>

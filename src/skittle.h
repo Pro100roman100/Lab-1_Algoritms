@@ -8,7 +8,6 @@ public:
 	Skittle(Vector3 position);
 
 	void Draw() const override;
-	BoundingBox GetBounds() const override;
 
 private:
 

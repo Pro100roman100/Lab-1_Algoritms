@@ -87,6 +87,9 @@
     <ClInclude Include="src\dynamicBVH.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\bowling_target.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -158,6 +161,7 @@
       <Filter>Windows Resource Files</Filter>
     </None>
     <None Include="test.map" />
+    <None Include="empty.map" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\application.rc">

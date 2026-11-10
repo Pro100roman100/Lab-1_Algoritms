@@ -24,6 +24,7 @@ public:
     const std::vector<PhysicsObject*>&  GetObjects();
 
     std::vector<PhysicsObject*> CheckIntersection(const BoundingBox& bounds) const;
+    std::vector<PhysicsObject*> Raycast(Ray ray) const;
 
     void Clear();
 
@@ -33,7 +34,8 @@ private:
 
     std::unique_ptr<BVHNode> BuildRecursive(std::vector<PhysicsObject*>& objs, size_t start, size_t end);
     void QueryRecursive(const BVHNode* node, const BoundingBox& bounds, std::vector<PhysicsObject*>& hits) const;
-    
+    void RaycastRecursive(const BVHNode* node, Ray ray, std::vector<PhysicsObject*>& hits) const;
+
     static BoundingBox CombineBoxes(const BoundingBox& a, const BoundingBox& b);
     static Vector3 GetBoxCenter(const BoundingBox& box);
 };

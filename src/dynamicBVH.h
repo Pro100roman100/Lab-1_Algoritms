@@ -30,6 +30,7 @@ public:
     const std::vector<PhysicsObject*>& GetObjects() const;
 
     std::vector<PhysicsObject*> CheckIntersection(const BoundingBox& bounds) const;
+    std::vector<PhysicsObject*> Raycast(Ray ray) const;
 
     void Clear();
     void Draw() const;
@@ -51,6 +52,8 @@ private:
 
     static BoundingBox CombineBoxes(const BoundingBox& a, const BoundingBox& b);
     static BoundingBox MakeFat(const BoundingBox& tight);
+
+    void RaycastRecursive(int nodeIndex, Ray ray, std::vector<PhysicsObject*>& hits) const;
 
     static float SurfaceArea(const BoundingBox& b);
     static bool Contains(const BoundingBox& outer, const BoundingBox& inner);

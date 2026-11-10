@@ -3,6 +3,7 @@
 #include "dynamic_sphere.h"
 #include "game_world.h"
 #include "skittle.h"
+#include "bowling_target.h"
 #include <cmath>
 
 Editor::Editor() {
@@ -43,6 +44,7 @@ void Editor::Update(Camera3D camera, float deltaTime) {
 
 		if (collision.hit && collision.distance < 100.0f) {
 			GameWorld::GetInstance().RemoveObject(selectedObject);
+			GameWorld::GetInstance().PhysicsUpdate();
 		}
 	}
 
@@ -64,6 +66,12 @@ void Editor::Update(Camera3D camera, float deltaTime) {
 	if (IsKeyPressed(KEY_SIX)) {
 		selectedIndex = selectedIndex == 6 ? 0 : 6;
 	}
+	if (IsKeyPressed(KEY_SEVEN)) {
+		selectedIndex = selectedIndex == 7 ? 0 : 7;
+	}
+	if (IsKeyPressed(KEY_EIGHT)) {
+		selectedIndex = selectedIndex == 8 ? 0 : 8;
+	}
 
 	SelectObject(selectedIndex);
 	if (currentObject == nullptr)
@@ -80,6 +88,7 @@ void Editor::Update(Camera3D camera, float deltaTime) {
 
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && currentObject->active) {
 		GameWorld::GetInstance().AddObject(currentObject);
+		GameWorld::GetInstance().PhysicsUpdate();
 		currentObject = nullptr;
 	}
 }
@@ -114,7 +123,7 @@ bool Editor::GetObjectPosition(Ray cameraRay, Vector3& output) {
 	collision.distance = FLT_MAX;
 	collision.hit = false;
 
-	DrawableObject* hitObject = nullptr;
+	GameObject* hitObject = nullptr;
 	GameWorld::GetInstance().Raycast(cameraRay, collision, hitObject);
 
 	if (!collision.hit || hitObject == nullptr) {
@@ -167,6 +176,12 @@ void Editor::SelectObject(int index) {
 		break;
 	case 6:
 		currentObject = new Skittle({ 0.0f, 0.0f, 0.0f });
+		break;
+	case 7:
+		currentObject = new BowlingTarget({ 0.0f, 0.0f, 0.0f });
+		break;
+	case 8:
+		currentObject = new BowlingTarget({ 0.0f, 0.0f, 0.0f }, 3.f);
 		break;
 	default:
 		currentObject = nullptr;

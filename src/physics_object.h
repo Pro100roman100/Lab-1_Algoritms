@@ -12,41 +12,36 @@ enum class ObjectType {
 
 class Collider {
 public:
-    virtual BoundingBox GetBounds(const Quaternion& rotation) = 0;
+    virtual RayCollision Raycast(Ray ray, Vector3 position) = 0;
 
     float mass = 1.f;
     float inverseMass = 1.f;
-    Matrix inertiaTensor = {};
+    BoundingBox bounds = {};
 
     virtual ~Collider() = default;
-protected:
-    BoundingBox bounds = {};
 };
 
 struct BoxCollider : Collider {
     Vector3 size = {};
 
-    BoundingBox GetBounds(const Quaternion& rotation) override;
+    RayCollision Raycast(Ray ray, Vector3 position) override;
     BoxCollider(Vector3 size = { 1.f, 1.f, 1.f }, float mass = 1.0f);
-
-private:
-    Quaternion lastRot = { -1 };
 };
 
 struct SphereCollider : Collider {
     float radius = 0.0f;
 
-    BoundingBox GetBounds(const Quaternion& rotation) override;
+    RayCollision Raycast(Ray ray, Vector3 position) override;
     SphereCollider(float radius = 1.0f, float mass = 1.0f);
 };
 
 struct PhysicsProperty {
     float elasticity = .95f;
+    float drag = 0.05f;
 
+    Vector3 acceleration = { 0.0f, 0.0f, 0.0f };
     Vector3 velocity = { 0.0f, 0.0f, 0.0f };
-    Quaternion rotationVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
     Vector3 impulse = { 0.0f, 0.0f, 0.0f };
-    Quaternion rotationImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     ObjectType type = ObjectType::_static;
     Collider* collider = nullptr;
@@ -54,17 +49,35 @@ struct PhysicsProperty {
 
 class PhysicsObject;
 
-struct CollisionResult {
-    PhysicsObject* objA;
-    PhysicsObject* objB;
-    Vector3 position;
+struct RaycastHit {
+    PhysicsObject* object = nullptr;
+    Vector3 point = { 0 };
+    Vector3 normal = { 0 };
+    float distance = 0.0f;
+};
+struct ContactPoint {
+    Vector3 localA;
+    Vector3 localB;
     Vector3 normal;
     float penetration;
+    
 };
+struct CollisionInfo {
+    PhysicsObject* a;
+    PhysicsObject* b;
+    
+    ContactPoint point;
 
+    void AddContactPoint(const Vector3& localA, const Vector3& localB, const Vector3& normal, float p) {
+        point.localA = localA;
+        point.localB = localB;
+        point.normal = normal;
+        point.penetration = p;
+    }
+};
 class PhysicsObject : public virtual GameObject {
 public:
-    PhysicsProperty const GetProperties() const;
+    const PhysicsProperty& GetProperties() const;
 
     virtual ~PhysicsObject() {
         delete properties.collider;
@@ -73,21 +86,19 @@ public:
     PhysicsObject(const PhysicsObject&) = delete;
     PhysicsObject& operator=(const PhysicsObject&) = delete;
 
+    RayCollision Raycast(Ray ray);
+
     void AddImpulse(Vector3 impulse);
-    void AddImpulseAtPoint(Vector3 impulse, Vector3 point);
     void AddForce(Vector3 force);
-    void AddForceAtPoint(Vector3 force, Vector3 point);
-    void ApplyAngularDamping(float damping);
 
-    void RotateObject(Quaternion rotation);
-    void ApplyAngularImpulse(Vector3 impulse, Vector3 point);
+    void ApplyAcceleration(float deltaTime);
 
-    virtual void OnCollisionEnter(PhysicsObject* other, const CollisionResult& result) {}
-    virtual void OnCollisionStay(PhysicsObject* other, const CollisionResult& result) {}
+    virtual void OnCollisionEnter(PhysicsObject* other, const CollisionInfo& result) {}
+    virtual void OnCollisionStay(PhysicsObject* other, const CollisionInfo& result) {}
     virtual void OnCollisionExit(PhysicsObject* other) {}
 
     BoundingBox GetBounds() const override;
 protected:
-    PhysicsObject(ObjectType type, Collider* collider, float elasticity);
+    PhysicsObject(ObjectType type, Collider* collider, float elasticity, float drag = 0.05f);
     PhysicsProperty properties;
 };

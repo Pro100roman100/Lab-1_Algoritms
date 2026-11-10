@@ -2,7 +2,7 @@
 #include "raymath.h"
 
 StaticCube::StaticCube(Vector3 position, Vector3 size = { 1.0f, 1.0f, 1.0f }) 
-    : PhysicsObject(ObjectType::_static, new BoxCollider(size, size.x * size.y * size.z), 0.1) {
+    : PhysicsObject(ObjectType::_static, new BoxCollider(size, size.x * size.y * size.z), 1.f) {
     this->position = position;
     this->size = size;
     color = WHITE;

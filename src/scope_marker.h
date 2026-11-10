@@ -10,6 +10,7 @@
 struct MarkerData {
 	std::string name;
 	std::string category;
+	int depth;
 	double duration;
 };
 
@@ -22,6 +23,8 @@ private:
 
 	long long frequency;
 	long long startTime;
+
+	static int currentDepth;
 
 public:
 	ScopeMarker(std::string name, std::string category = "");
