@@ -208,7 +208,7 @@ void PhysicsWorld::SolveCollisions() {
         const Vector3 relativeVelocity = propB.velocity - propA.velocity;
         const float velAlongNormal = Vector3DotProduct(relativeVelocity, normal);
 
-        if (velAlongNormal >= 0.0f)
+        if (velAlongNormal > 1.0f)
             continue;
 
         float elasticity = propA.elasticity * propB.elasticity;

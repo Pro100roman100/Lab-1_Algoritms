@@ -54,9 +54,6 @@ void GameWorld::DrawWorld(Camera3D camera, bool showEditorObjects) {
         }
     }
 
-    //if (showEditorObjects)
-    //    physicsWorld.DebugDraw();
-
     invisibleObjects = drawableObjects.getTotalObjects() - visibleObjects;
 
     EndMode3D();
