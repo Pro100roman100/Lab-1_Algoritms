@@ -17,7 +17,8 @@ enum Objects {
 	DynamicSpherePos,
 	SkittlePos,
 	BowlingTargetPos,
-	BowlingTargetBigPos
+	BowlingTargetBigPos,
+	RobotPos
 };
 
 class MapSave {

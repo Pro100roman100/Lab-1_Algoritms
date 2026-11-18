@@ -4,6 +4,7 @@
 #include "game_world.h"
 #include "skittle.h"
 #include "bowling_target.h"
+#include "robot.h"
 #include <cmath>
 
 Editor::Editor() {
@@ -71,6 +72,9 @@ void Editor::Update(Camera3D camera, float deltaTime) {
 	}
 	if (IsKeyPressed(KEY_EIGHT)) {
 		selectedIndex = selectedIndex == 8 ? 0 : 8;
+	}
+	if (IsKeyPressed(KEY_NINE)) {
+		selectedIndex = selectedIndex == 9 ? 0 : 9;
 	}
 
 	SelectObject(selectedIndex);
@@ -156,8 +160,14 @@ bool Editor::GetObjectPosition(Ray cameraRay, Vector3& output) {
 }
 
 void Editor::SelectObject(int index) {
+	if (index == previousIndex && (index == 0 || currentObject != nullptr))
+		return;
+
+	previousIndex = selectedIndex;
+
 	if (currentObject != nullptr)
 		delete currentObject;
+
 	switch (index) {
 	case 1:
 		currentObject = new StaticCube({ 0.0f,0.0f,0.0f }, { 1.0f,1.0f,1.0f });
@@ -182,6 +192,9 @@ void Editor::SelectObject(int index) {
 		break;
 	case 8:
 		currentObject = new BowlingTarget({ 0.0f, 0.0f, 0.0f }, 3.f);
+		break;
+	case 9:
+		currentObject = new Robot({ 0.0f, 0.0f, 0.0f });
 		break;
 	default:
 		currentObject = nullptr;

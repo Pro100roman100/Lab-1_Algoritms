@@ -2,6 +2,7 @@
 #include "dynamic_sphere.h"
 #include "skittle.h"
 #include "bowling_target.h"
+#include "robot.h"
 
 #include <sstream>
 #include <vector>
@@ -31,7 +32,7 @@ bool MapSave::LoadFromFile(std::string filename) {
 		std::string extra;
 		if (!(record >> type >> position.x >> position.y >> position.z) ||
 			record >> extra ||
-			type < Objects::Cube1x1Pos || type > Objects::BowlingTargetBigPos) {
+			type < Objects::Cube1x1Pos || type > Objects::RobotPos) {
 			LOG("Invalid record in map file " + filename + ".map");
 			return false;
 		}
@@ -65,11 +66,11 @@ bool MapSave::LoadFromFile(std::string filename) {
 			}
 			break;
 		case Objects::BowlingTargetBigPos:
-				if (!targetLoaded) {
-					parcedObjects.push_back(new BowlingTarget(object.position, 3.f));
-					targetLoaded = true;
-				}
-				break;
+			if (!targetLoaded) {
+				parcedObjects.push_back(new BowlingTarget(object.position, 3.f));
+				targetLoaded = true;
+			}
+			break;
 		case Objects::DynamicSpherePos:
 			parcedObjects.push_back(new DynamicSphere(object.position));
 			break;
@@ -82,6 +83,9 @@ bool MapSave::LoadFromFile(std::string filename) {
 				PlayerCamera::GetCamera().SetPosition(object.position);
 				cameraLoaded = true;
 			}
+			break;
+		case Objects::RobotPos:
+			parcedObjects.push_back(new Robot(object.position));
 			break;
 		}
 	}
@@ -141,6 +145,9 @@ bool MapSave::SaveToFile(std::string filename) {
 		}
 		else if (auto sphere = dynamic_cast<DynamicSphere*>(object)) {
 			mapFile << Objects::DynamicSpherePos << " " << sphere->position.x << " " << sphere->position.y << " " << sphere->position.z << std::endl;
+		}
+		else if (auto robot = dynamic_cast<Robot*>(object)) {
+			mapFile << Objects::RobotPos << " " << robot->position.x << " " << robot->position.y << " " << robot->position.z << std::endl;
 		}
 	}
 

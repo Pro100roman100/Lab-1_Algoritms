@@ -15,6 +15,7 @@ private:
 	GameObject* currentObject = nullptr;
 
 	int selectedIndex = 1;
+	int previousIndex = 0;
 
 	bool GetObjectPosition(Ray cameraRay, Vector3& output);
 	void SelectObject(int obj);

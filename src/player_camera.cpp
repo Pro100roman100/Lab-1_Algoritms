@@ -6,20 +6,12 @@ PlayerCamera* PlayerCamera::currentCamera = nullptr;
 void PlayerCamera::Move(Vector3 transform) {
 	camera.position += transform;
 
-	Target* target = Target::GetCurrentTarget();
-	if (target != nullptr) {
-		camera.target = target->position;
+	Vector3 targetDir = camera.target - camera.position;
+	targetDir.y = 0;
+	float dist = Vector3Length(targetDir);
 
-		Vector3 targetDir = target->position - camera.position;
-		targetDir.y = 0;
-		float dist = Vector3Length(targetDir);
-
-		if (dist < 10.f && dist > 0.f) {
-			camera.position -= Vector3Normalize(targetDir) * (10.f - dist);
-		}
-	}
-	else {
-		camera.target = camera.position + direction;
+	if (dist < 10.f && dist > 0.f) {
+		camera.position -= Vector3Normalize(targetDir) * (10.f - dist);
 	}
 }
 
@@ -28,7 +20,7 @@ void PlayerCamera::Reset() {
 	if (Target::GetCurrentTarget() != nullptr)
 		camera.target = Target::GetCurrentTarget()->position;
 	else
-		camera.target = camera.position + direction;
+		camera.target = { 0.f,0.f,0.f };
 }
 
 PlayerCamera::PlayerCamera() {
@@ -68,6 +60,8 @@ void PlayerCamera::Update(float deltaTime) {
 
 	if (Target::GetCurrentTarget() != nullptr)
 		camera.target = Target::GetCurrentTarget()->position;
+	else
+		camera.target = Vector3(0.f, 0.f, 0.f);
 
 	Vector3 forward = camera.target - camera.position;
 	forward.y = 0.0f;
